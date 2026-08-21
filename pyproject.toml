@@ -1,0 +1,66 @@
+[project]
+# The distribution name is prefixed because `pantry` is taken on PyPI. The
+# import stays `pantry`.
+name = "mealtime-pantry"
+version = "0.1.0"
+description = "Food product records with local fuzzy search, Open Food Facts discovery, and a CLI to add products."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13"
+authors = [{ name = "owahltinez", email = "oscar@wahltinez.org" }]
+keywords = ["nutrition", "food", "macros", "cli", "agent", "afcd"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Utilities",
+]
+
+dependencies = ["click-agentcli>=0.1.0",
+    "python-dotenv>=1.0", "click>=8.1", "rapidfuzz>=3.9"]
+
+[project.urls]
+Homepage = "https://github.com/mealtime-tools/pantry"
+
+# The browser fallback is opt-in at the command line, so it is opt-in at
+# install time too: a clone with no Playwright still fetches over plain HTTP.
+[project.optional-dependencies]
+browser = ["playwright>=1.44"]
+
+[project.scripts]
+pantry = "pantry.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pantry"]
+
+# The Agent Skill is authored at the repository root, where a human sees it,
+# and mapped into the package so `pantry skill install` finds it through
+# importlib.resources.
+# Redistributable data is listed file by file rather than by directory. An
+# `exclude` does not override a force-include, so a denylist could not keep
+# the local-only Coles shard out of a wheel built from a private checkout.
+# Adding a shard here is therefore a deliberate act of publishing it.
+[tool.hatch.build.targets.wheel.force-include]
+"SKILL.md" = "pantry/skills/pantry/SKILL.md"
+"data/AFCD-NOTICE.md" = "pantry/data/AFCD-NOTICE.md"
+"data/afcd.jsonl" = "pantry/data/afcd.jsonl"
+"data/afcd.metadata.json" = "pantry/data/afcd.metadata.json"
+
+[tool.pytest.ini_options]
+testpaths = ["src/pantry"]
+python_files = ["*_test.py"]
+
+[tool.ruff]
+line-length = 79

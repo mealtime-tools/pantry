@@ -1,0 +1,117 @@
+# pantry
+
+Food product records — per 100 g, always — with local fuzzy search, Open Food
+Facts discovery, and a CLI to add the products that are missing.
+
+Three verbs over four providers: `search` fans out, `lookup` is exact and
+offline, and `add` acquires from whichever provider claims the reference.
+
+Pantry owns food data and nothing else: the records, the search over them, the
+sources they come from, and the commands that add new ones. Recipe arithmetic
+lives elsewhere.
+
+## Install
+
+```sh
+uv sync --project .
+uv run --project . pantry --help
+uv run --project . pantry skill install   # so agents can discover it
+```
+
+## Use
+
+```sh
+pantry --json search "greek yogurt" --limit 5
+pantry --json search "chobani greek yogurt plain" --remote
+pantry --json lookup coles 1047
+pantry add "https://www.coles.com.au/product/example-1047"
+pantry add usda:2476857
+pantry add --manual --id sourdough --name Sourdough < panel.txt
+pantry guide            # the full agent-facing manual, no network needed
+```
+
+`pantry guide` is the manual. `SKILL.md` is the agent-facing contract. Neither
+is restated here.
+
+## Data
+
+The canonical per-source shards live in a directory Pantry only ever reads.
+`coles.jsonl` is a frozen, irreplaceable 10,297-row scrape; nothing in this
+package rewrites it. Point `PANTRY_DATA_DIR` at another copy if you keep it
+somewhere else.
+
+The user's own records go under `$XDG_CONFIG_HOME/pantry` (or
+`~/.config/pantry`), in the same layout the frozen data ships in: one
+`<source>.jsonl` shard per source. No command writes into a checkout;
+promoting a record into one is a deliberate copy a human diffs and commits.
+
+No credential is needed to build, test or run. A `USDA_API_KEY` in the
+environment enables the USDA source; without one it is skipped silently.
+
+### Record contract
+
+Nutrients are per 100 g. Consumers scale by `grams / 100`; Pantry never stores
+a pre-scaled nutrient. Identity is `(source, id)`, with source-native string
+ids normalised at ingress. Pantry supports `coles`, `woolworths`, `afcd`,
+`usda`, `manual`, and `openfoodfacts`.
+Recipes deliberately accepts only its documented resolvable subset.
+
+JSONL keys have this fixed order, because a one-product edit must remain a
+one-line diff:
+
+```
+source id name brand kj fat carbs protein fiber sugar kcal url
+serving_size serving_unit total_size total_unit
+```
+
+Optional missing keys are omitted. Unknown keys are preserved after known
+ones. Every shard omits `source` because the filename supplies it, in the
+shipped data and the user's store alike. Records sort by source order, then
+id.
+
+Id ordering is a key, never a comparator: digit ids use `(0, len, value)` and
+other ids use `(1, 0, value)`. Digits sort first, length before codepoint, and
+leading zeroes stay distinct. This avoids the non-transitive mixed-id
+comparator that made output depend on input order.
+
+Canonical JSON uses a JavaScript-compatible float formatter. ECMAScript uses
+exponential notation only below decimal exponent -6 or at least 21 and renders
+integral floats without `.0`; Python's defaults differ at both ends. The
+formatter is part of the record format, not presentation.
+
+### Frozen data
+
+`data/coles.jsonl` is an irreplaceable 10,297-row scrape with sha256
+`9d8eaa3b32f9775006e36710cfcf323a011c8a6b0aa48736db67d10d0bc8d7f6`.
+`data/afcd.jsonl` has 1,588 rows and sha256
+`53938eec2e627db56666df8abca04f6bc1dca844fb8decbfea32cfaa762d775a`.
+Tests pin the counts, checksums, and byte-for-byte re-serialization.
+
+One Coles row contains `0.00001`: Python normally writes `1e-05`, which is why
+a parse-and-dump migration would corrupt the frozen bytes while appearing
+semantically equal. No command rewrites these shards. A fetched product already
+held is never fetched again; malformed nutrition is refused; missing values are
+never inferred as zero; `--zero-calorie` conflicts with any non-zero nutrient.
+Search may display a numeric convenience shape, but those values are never
+accepted as stored facts without resolving the source record.
+
+Runtime additions go only to XDG storage, never into a checkout. A stored
+row shadows the base row with the same `(source, id)` and nothing more, so a
+`coles.jsonl` in the store cannot stand in for the shipped shard.
+
+Acquisition never defeats bot protection: no captcha solving, proxy rotation,
+fingerprint spoofing, or retry-until-success. A block ends the session. Page
+budgets are claimed before requests, refused requests still count, and the
+default pace between requests is three seconds.
+
+## Develop
+
+```sh
+uv run --project . pytest -q
+uv run --project importers/afcd pytest -q importers/afcd/tests
+uvx ruff check src --line-length 79
+```
+
+No test touches the network, launches a browser, or writes outside its
+temporary directory. The HTTP transport, the clock and the store are all
+injected for exactly that reason.
