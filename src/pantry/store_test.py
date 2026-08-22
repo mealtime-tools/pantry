@@ -3,9 +3,12 @@
 import hashlib
 from pathlib import Path
 
+import pytest
 
 from pantry.data import data_dir
+from pantry.nutrition import NutritionError
 from pantry.open_food_facts import cache_dir
+from pantry.products import ProductError
 from pantry.store import Store, store_dir
 
 BASE = [
@@ -121,3 +124,57 @@ def test_user_data_stays_out_of_every_checkout(
     if before is not None:
         after = hashlib.sha256(shard.read_bytes()).hexdigest()
         assert after == before
+
+
+# A record carrying the one nutrient stored in milligrams, so the two write
+# paths can be told apart by what they check about it.
+SALTED = {
+    "source": "manual",
+    "id": "loaf",
+    "name": "Loaf",
+    "brand": "",
+    "kcal": 100.0,
+    "protein": 1.0,
+    "fat": 1.0,
+    "carbs": 1.0,
+    "sodium": 400.0,
+}
+
+
+def test_annotating_a_record_carries_its_sodium_across(
+    make_deps, run, store_path
+) -> None:
+    """`annotate` edits the basis and re-measures nothing."""
+    deps = make_deps([SALTED])
+
+    result = run(deps, "annotate", "manual", "loaf", "--basis", "as_prepared")
+
+    assert result.exit_code == 0
+    stored = (store_path / "manual.jsonl").read_text(encoding="utf-8")
+    # In milligrams, in key order, and ahead of the basis it now carries.
+    assert '"sodium":400,"kcal":100,"basis":"as_prepared"' in stored
+
+
+def test_the_edit_path_checks_the_shape_of_a_sodium_it_did_not_author(
+    tmp_path: Path,
+) -> None:
+    """What `Store.update` will and will not say about a sodium figure.
+
+    `update` exists so a record whose panel today's rules would refuse can
+    still be annotated, so it checks shape and not plausibility. That leaves
+    the 100,000 mg ceiling to `add`, which is the only path that ever authors
+    a sodium figure: `annotate` copies the held one verbatim and has no option
+    to change it. A figure that is merely impossible is still refused here,
+    because that is shape.
+    """
+    store = Store(lambda: [], tmp_path)
+
+    for bad in (-1, "400", float("inf")):
+        with pytest.raises(ProductError, match="sodium"):
+            store.update({**SALTED, "sodium": bad})
+
+    # Well-formed but implausible: tolerated on this path by design, the same
+    # way a frozen row with impossible macros is. `add` is where it is caught.
+    store.update({**SALTED, "sodium": 500_000.0})
+    with pytest.raises(NutritionError, match="sodium"):
+        store.add({**SALTED, "sodium": 500_000.0})
