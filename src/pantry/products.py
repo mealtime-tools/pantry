@@ -62,13 +62,17 @@ PRODUCT_KEYS = (
 
 # Energy and the three macros, written next. Enumerated where the vocabulary
 # nutrients are not, because these are the figures cross-checked against each
-# other and against the 100 g the panel describes. The macro names and their
-# order come from the shared vocabulary, so a rename there is a rename here.
-CORE_NUTRIENTS = ("kcal", "kj", *energy.KCAL_PER_GRAM)
+# other and against the 100 g the panel describes. The names and their order
+# come from the shared vocabulary, so a rename there is a rename here.
+#
+# `energy.REQUIRED` and not `energy.KCAL_PER_GRAM`: alcohol carries an Atwater
+# factor without being one of the three every panel states, so requiring it
+# here would refuse every record that is not a drink.
+CORE_NUTRIENTS = ("kcal", "kj", *energy.REQUIRED)
 
 # The figures every record carries, so a consumer may default them. `kj` is
 # absent: it is stored only when a label printed it.
-CORE_FIGURES = ("kcal", *energy.KCAL_PER_GRAM)
+CORE_FIGURES = ("kcal", *energy.REQUIRED)
 
 # Written last, after the figures they qualify, so a line read by eye carries
 # the caveat beside the numbers it applies to.
@@ -181,11 +185,11 @@ def record_keys(product: Product) -> tuple[str, ...]:
 def assert_product_record(product: Product) -> None:
     """Structural checks only, safe for the frozen historical Coles rows.
 
-    141 of those rows fail today's stricter nutrition rules and 635 of the
-    11,885 cannot account for their own stated energy. None of them can be
-    re-scraped, so the shard is validated for shape and not for plausibility;
-    `assert_exportable_product` is where the plausibility rules run, and it is
-    only ever reached by a record something is authoring.
+    141 of those rows fail today's stricter nutrition rules and none of them
+    can be re-scraped, so the shard is validated for shape and not for
+    plausibility. A further 635 of the 11,885 cannot account for their own
+    stated energy, which is why that check is a warning rather than a rule:
+    see `nutrition.reconciliation_note`.
     """
     assert_identity(product)
     _check_keys(product)

@@ -158,14 +158,19 @@ NEVER INFER ZEROS
   a genuine 0 kcal record with 38.758 g of it. Sugar is not exempt, and the
   100 g per 100 g ceiling still applies to every nutrient alike.
 
-  A panel is also refused when its macros cannot account for the energy
-  printed beside it: protein x 4 + fat x 9 + carbohydrates x 4 has to come
-  within 15 percent under or 10 percent over the stated calories. That is the
-  mistake no ceiling can see -- two columns read from two different places,
-  every figure plausible on its own. It costs a genuine refusal on the foods
-  Atwater under-counts by design: dried legumes, whose fibre an AU label
-  excludes from carbohydrate, and anything alcoholic. Enter those with a
-  corrected energy figure or not at all.
+  A panel whose macros cannot account for the energy printed beside it is
+  stored with a warning, not refused. The sum is protein x 4 + fat x 9 +
+  carbohydrates x 4, plus alcohol x 7 when a source states an ethanol figure,
+  against the stated calories within 15 percent under or 10 percent over. The
+  warning names both figures and the gap, and travels in `notes` under --json.
+
+  It is a warning because most panels that fail are not wrong: polyols and
+  fibre are excluded from carbohydrate on an AU label, and 635 of the 11,885
+  bundled rows do not reconcile for reasons like that. What it does catch is
+  the one mistake no ceiling here can see -- a per-serve column read against a
+  per-100 g one, every figure plausible on its own -- so read it rather than
+  ignore it. For a drink, state the alcohol: `-n alcohol=12.1g` accounts for
+  the 7 kcal a gram nothing else can.
 
 STORAGE
   Everything added writes immediately under $XDG_CONFIG_HOME/pantry, or

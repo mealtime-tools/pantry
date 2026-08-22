@@ -17,6 +17,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: pantry
+
+      # mealtime-nutrition is a path dependency until it reaches PyPI, so the
+      # runner needs it beside this checkout. actions/checkout cannot write
+      # outside the workspace, hence both repositories sit inside it.
+      - uses: actions/checkout@v7
+        with:
+          repository: mealtime-tools/nutrition
+          path: nutrition
 
       # Pinned exactly: setup-uv dropped its floating major tags after v7,
       # so v8 and later only exist as exact versions.
@@ -31,9 +41,11 @@ jobs:
 
       - name: Run test suite
         run: uv run --python ${{ matrix.python-version }} pytest
+        working-directory: pantry
 
       # A second project with its own lock, so it needs its own invocation.
       - name: Run the AFCD importer suite
         run: >-
           uv run --python ${{ matrix.python-version }}
           --project importers/afcd pytest -q importers/afcd/tests
+        working-directory: pantry

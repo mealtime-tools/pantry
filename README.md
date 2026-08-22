@@ -135,10 +135,14 @@ Both were rewritten once, when the vocabulary moved to the shared library and
 else changed: the new bytes are the old bytes with those two key names
 substituted, which is how the rewrite was proven rather than argued.
 
-635 of the 11,885 rows cannot account for their own stated energy, so the
-Atwater check runs on the way in and never over the frozen data. Most are
-foods Atwater under-counts by design — dried legumes, whose fibre an AU label
-excludes from carbohydrate, and anything alcoholic.
+635 of the 11,885 rows cannot account for their own stated energy. Measuring
+that is what decided the check: refusing on it would turn away one real
+retailer product in nineteen, because most failures are legitimate — polyols
+and fibre are excluded from carbohydrate on an AU label. So `add` warns instead
+and stores the record, naming both figures and the gap. The one thing it really
+catches is a per-serve column read against a per-100 g one, which nothing else
+here can see. eatout refuses on the same shared check, because its data is
+curated per serving; the arithmetic is shared and the verdict is not.
 
 One Coles row contains `0.00001`: Python normally writes `1e-05`, which is why
 a parse-and-dump migration would corrupt the frozen bytes while appearing

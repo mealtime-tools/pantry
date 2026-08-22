@@ -17,6 +17,7 @@ from pantry.nutrition import (
     nutrients_for_storage,
     parse_amount,
     parse_panel,
+    reconciliation_note,
 )
 from pantry.products import (
     PRODUCT_BASES,
@@ -37,13 +38,23 @@ from pantry.sites import build_record
 
 
 def _human(payload: dict) -> list[str]:
-    """Notes are deliberately absent: the caller echoes them either way."""
+    """Provider notes are absent: `_acquire` echoes those either way.
+
+    The reconciliation warning is not one of those and would otherwise never
+    reach a person, so it is asked for again here rather than read out of
+    `notes` -- which also carries the provider's, and printing those would say
+    them twice.
+    """
     lines = []
     label = f"{payload['source']}:{payload['id']}"
 
     if payload["changes"]:
         lines.append(f"refresh changes for {label}:")
         lines.extend(f"  {change}" for change in payload["changes"])
+
+    warning = reconciliation_note(payload["product"])
+    if warning:
+        lines.append(f"warning: {warning}")
 
     if payload["stored"]:
         lines.append(f"stored {describe(payload['product'])}")
@@ -64,7 +75,14 @@ def _payload(
     changes: list[str] | None = None,
     notes: list[str] | None = None,
 ) -> dict:
-    """The one shape every way of adding a record answers in."""
+    """The one shape every way of adding a record answers in.
+
+    The reconciliation warning is added here rather than on each provider's
+    path, because it is about the record that was stored and not about how it
+    was acquired: a pasted label, a retailer page and a barcode all reach this.
+    """
+    warning = reconciliation_note(product)
+
     return {
         "stored": stored,
         "reason": reason,
@@ -72,7 +90,7 @@ def _payload(
         "id": product["id"],
         "product": product,
         "changes": changes or [],
-        "notes": notes or [],
+        "notes": [*(notes or []), *([warning] if warning else [])],
     }
 
 

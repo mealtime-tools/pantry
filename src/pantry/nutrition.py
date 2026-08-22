@@ -20,12 +20,16 @@ from typing import Any
 from nutrition import energy, figures, vocabulary
 
 # Every nutrient a record may carry beyond energy and the three macros, taken
-# from the shared vocabulary rather than listed again. The macros are excluded
+# from the shared vocabulary rather than listed again. The three are excluded
 # because they are enumerated in `products` and cross-checked against each
 # other; everything else is governed by one rule and sorts alphabetically, so
 # the vocabulary growing changes nothing here.
+#
+# `energy.REQUIRED` and not `energy.KCAL_PER_GRAM`: alcohol has an Atwater
+# factor but is not one of the three a panel must state, so it belongs here,
+# storable when a source publishes an ethanol figure and absent otherwise.
 NUTRIENTS = tuple(
-    key for key in vocabulary.NUTRIENTS if key not in energy.KCAL_PER_GRAM
+    key for key in vocabulary.NUTRIENTS if key not in energy.REQUIRED
 )
 
 # The nutrients a confirmed zero-energy record may still hold. A mineral has no
@@ -40,10 +44,6 @@ _MAX_KCAL_PER_100G = 900
 
 # Rounding on a label lets the three macros total slightly over 100 g.
 _MASS_TOLERANCE = 105
-
-# The three figures the mass ceiling is measured over, and the three the
-# Atwater sum is made of: the same three, read off the shared vocabulary.
-_MACROS = tuple(energy.KCAL_PER_GRAM)
 
 # The sodium row, and only the sodium row: the word opens the line and its
 # figure follows immediately, with nothing between but the "less than" a trace
@@ -228,7 +228,7 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
             f"nutrition panel has more energy than pure fat: {kcal} kcal"
         )
 
-    for key in _MACROS:
+    for key in energy.REQUIRED:
         _check_mass(panel, key)
 
     # Absent is fine (plenty of labels omit them) but present and wrong is
@@ -241,23 +241,55 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
     # Catches the two mistakes a per-100 g figure cannot survive: a
     # per-serving column read by mistake, and a milligram figure landing in a
     # gram field.
-    mass = sum(panel[key] for key in _MACROS)
+    mass = sum(panel[key] for key in energy.REQUIRED)
     if mass > _MASS_TOLERANCE:
         raise NutritionError(
             f"nutrition panel holds {mass:.1f} g of macros per 100 g"
         )
 
-    # Whether the macros can account for the energy printed beside them. The
-    # mass ceiling catches a column read from the wrong place; this catches a
-    # panel whose columns were read from two different places, which is the
-    # same figure being plausible and wrong.
-    #
-    # Ingress only, and deliberately: 635 of the 11,885 frozen rows do not
-    # reconcile, so `assert_product_record` never asks. Raised as the
-    # library's own `EnergyError` rather than restated as a `NutritionError`,
-    # because the rule and the tolerance are the library's and a second
-    # message would drift from them.
-    energy.assert_energy_reconciles(float(kcal), panel)
+    # Whether the macros account for the energy is deliberately not checked
+    # here: it is a warning rather than a refusal, and `reconciliation_note`
+    # is where it is worded.
+
+
+def reconciliation_note(panel: dict[str, Any]) -> str | None:
+    """Whether a panel's macros account for the energy printed beside them.
+
+    Advisory, not a refusal, and that split is the whole reason the arithmetic
+    lives in a shared library while this decision does not. Measured: 635 of
+    the 11,885 frozen rows do not reconcile, and most for legitimate reasons --
+    polyols, which an AU label excludes from carbohydrate, and alcohol, whose
+    7 kcal a gram nothing can account for until a source states an ethanol
+    figure. Refusing on that basis would turn one in nineteen real retailer
+    products away.
+
+    A per-serve column read against a per-100 g one is in there too, and that
+    is the silent error no ceiling here can catch, so it is said out loud
+    rather than either refused or swallowed. eatout refuses on the same check
+    because its data is curated per serving; pantry's is whatever a retailer
+    published, so pantry warns.
+
+    The tolerance stays the library's -- asked by calling its refusal rather
+    than reimplementing it -- and only the wording is pantry's.
+    """
+    kcal = panel.get("kcal")
+    if not isinstance(kcal, (int, float)) or isinstance(kcal, bool):
+        return None
+
+    try:
+        energy.assert_energy_reconciles(float(kcal), panel)
+    except energy.EnergyError:
+        accounted = energy.atwater_kcal(panel)
+        if accounted is None:
+            return None
+        return (
+            "energy unreconciled: protein, fat and carbohydrates account for"
+            f" {accounted:.0f} kcal against the stated {float(kcal):.0f} kcal,"
+            f" a gap of {accounted - float(kcal):+.0f} kcal;"
+            " check the panel read one column and not two"
+        )
+
+    return None
 
 
 def nutrients_for_storage(
@@ -282,7 +314,7 @@ def nutrients_for_storage(
             )
 
     zeroed: dict[str, float] = {"kcal": 0}
-    zeroed.update({key: 0 for key in _MACROS})
+    zeroed.update({key: 0 for key in energy.REQUIRED})
     zeroed.update(
         {k: panel[k] for k in CALORIE_FREE if panel.get(k) is not None}
     )

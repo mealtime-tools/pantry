@@ -6,7 +6,6 @@ ceilings and the zero-calorie declaration.
 """
 
 import pytest
-from nutrition.energy import EnergyError
 from nutrition.units import UnknownUnitError
 
 from pantry.nutrition import (
@@ -15,6 +14,7 @@ from pantry.nutrition import (
     nutrients_for_storage,
     parse_amount,
     parse_panel,
+    reconciliation_note,
 )
 
 SERVING_FIRST = """
@@ -301,21 +301,47 @@ Carbohydrate 64.3g
 """
 
 
-def test_a_panel_whose_macros_cannot_account_for_its_energy_is_refused() -> (
+def test_a_panel_whose_macros_cannot_account_for_its_energy_is_flagged() -> (
     None
 ):
-    """The mistake the mass ceiling cannot see.
+    """The mistake no ceiling here can see, said out loud rather than refused.
 
-    Every figure here is plausible on its own and the three macros are only
-    90 g per 100 g, so nothing structural is wrong: the panel simply describes
-    two different foods. 553 rows of the frozen Coles shard are this shape and
-    were stored silently.
+    Every figure is plausible on its own and the three macros are only 90 g per
+    100 g, so nothing structural is wrong: the panel simply describes two
+    different foods. Stored anyway, because 635 of the 11,885 frozen rows are
+    unreconciled and most of them legitimately, so refusing would turn away one
+    real product in nineteen.
     """
     panel = parse_panel(MISMATCHED)
 
     assert panel["kcal"] == pytest.approx(707.5, abs=0.1)
-    with pytest.raises(EnergyError, match="contradicts"):
-        assert_usable_nutrients(panel)
+    assert_usable_nutrients(panel)
+
+    # Both figures and the gap between them, because the number a person
+    # needs is how far off it is and against what.
+    assert reconciliation_note(panel) == (
+        "energy unreconciled: protein, fat and carbohydrates account for"
+        " 460 kcal against the stated 707 kcal, a gap of -247 kcal;"
+        " check the panel read one column and not two"
+    )
+
+
+def test_a_panel_that_adds_up_is_not_flagged() -> None:
+    """Otherwise the warning is noise and stops being read."""
+    assert reconciliation_note(parse_panel(SERVING_FIRST)) is None
+
+
+def test_alcohol_accounts_for_the_energy_no_macro_explains() -> None:
+    """A cooking wine reads as a contradiction until its ethanol is stated.
+
+    The shared library carries the 7 kcal a gram; what this pins is that a
+    stated alcohol figure reaches it, because `alcohol` is a nutrient pantry
+    stores rather than one of the three it requires.
+    """
+    wine = "Energy 370kJ\nProtein 0.2g\nFat 0g\nCarbohydrate 0.7g"
+
+    assert reconciliation_note(parse_panel(wine)) is not None
+    assert reconciliation_note({**parse_panel(wine), "alcohol": 12.1}) is None
 
 
 def test_a_panel_that_states_only_some_macros_is_refused_for_that_instead() -> (
@@ -332,7 +358,12 @@ def test_a_panel_that_states_only_some_macros_is_refused_for_that_instead() -> (
     with pytest.raises(NutritionError, match="no carbohydrates"):
         assert_usable_nutrients(panel)
 
+    assert reconciliation_note(panel) is None
+
 
 def test_a_zero_calorie_declaration_is_not_an_atwater_claim() -> None:
     """Nothing to reconcile: an all-zero panel accounts for its own zero."""
-    assert nutrients_for_storage({}, zero_calorie=True)["kcal"] == 0
+    stored = nutrients_for_storage({}, zero_calorie=True)
+
+    assert stored["kcal"] == 0
+    assert reconciliation_note(stored) is None

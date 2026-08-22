@@ -241,18 +241,31 @@ energy printed beside a sugar figure is a half-parsed panel.
 
 A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of any
-nutrient per 100 g, three macros totalling more than 105 g per 100 g, macros
-that cannot account for the stated energy, a nutrient name outside the
-vocabulary, or a `basis` that is neither `as_sold` nor `as_prepared`.
+nutrient per 100 g, three macros totalling more than 105 g per 100 g, a
+nutrient name outside the vocabulary, or a `basis` that is neither `as_sold`
+nor `as_prepared`.
 
-The energy check is `protein × 4 + fat × 9 + carbohydrates × 4` against the
-stated calories, within 15% under or 10% over. It catches two columns read
-from two different places, where every figure is plausible on its own. It also
-refuses the foods Atwater under-counts by design — dried legumes, whose fibre
-an AU label excludes from carbohydrate, and anything alcoholic. 635 of the
-11,885 bundled rows are in that class, which is why the check runs only on the
-way in and never over the frozen data. Do not work around it by editing
-macros; correct the energy figure or leave the product out. The basis is the one of those also
+## The reconciliation warning
+
+A panel whose macros cannot account for its stated energy is **stored, with a
+warning** — `protein × 4 + fat × 9 + carbohydrates × 4`, plus `alcohol × 7`
+when the source states an ethanol figure, against the stated calories within
+15% under or 10% over. The warning names both figures and the gap, and arrives
+in `notes` beside the record:
+
+```json
+{"stored":true,"product":{...},"notes":["energy unreconciled: protein, fat and
+carbohydrates account for 460 kcal against the stated 708 kcal, a gap of -247
+kcal; check the panel read one column and not two"]}
+```
+
+**Report it; do not work around it, and do not edit macros to silence it.**
+Most panels that fail are not wrong — polyols and fibre are excluded from
+carbohydrate on an AU label, and 635 of the 11,885 bundled rows do not
+reconcile for reasons like that, which is why this warns rather than refuses.
+What it does catch is the one error nothing else here can: a per-serve column
+read against a per-100 g one, where every figure is plausible alone. For a
+drink, state the alcohol — `-n alcohol=12.1g` — and the gap closes honestly. The basis is the one of those also
 checked when a record is **read**: an unrecognised value would read as absent,
 and absent means as-sold. `basis_note` is free text and is not checked at all;
 a shard is never failed over a mistake you can see in `lookup`.
