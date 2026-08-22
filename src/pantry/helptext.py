@@ -99,6 +99,10 @@ ADD ONE RECORD
   and would let your own entry for the same barcode overwrite it. It is
   community data, not proof of current availability.
 
+  -n NAME=VALUE states one row outright, repeatably, instead of pasting a
+  panel: -n energy=23kJ -n sodium=1775mg. Nothing is inferred from layout,
+  so there is no column to pick and no row to find in a line.
+
   A row printed in milligrams is converted to the grams a record holds, so
   "Sodium 400mg" and "Sodium 0.4g" both store 0.4, and a trace bound such as
   "LESS THAN 5mg" stores the bound. Any nutrient beyond the four macros must

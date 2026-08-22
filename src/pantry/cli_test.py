@@ -94,3 +94,78 @@ def test_search_prefers_head_term_matches(store_path) -> None:
         "butter, plain" in r["name"].lower() for r in butter_results[:3]
     )
     assert all("sauce" not in r["name"].lower() for r in butter_results[:3])
+
+
+def test_a_stated_panel_needs_no_paste_and_no_guessing(make_deps, run) -> None:
+    """The row names and units come from whoever is holding the packet.
+
+    A pasted panel has to be guessed at -- which column is per 100 g, which
+    line is which row -- and every one of those guesses is something the
+    person reading the label already knows.
+    """
+    deps = make_deps()
+    scope = run(
+        deps,
+        "--json",
+        "add",
+        "--manual",
+        "--id",
+        "cube",
+        "--name",
+        "Stock Cubes",
+        "-n",
+        "energy=23kJ",
+        "-n",
+        "protein=0.05g",
+        "-n",
+        "fat=0.35g",
+        "-n",
+        "carbs=0.53g",
+        "-n",
+        "sodium=1775mg",
+    )
+    product = json.loads(scope.output)["data"]["product"]
+
+    assert product["kj"] == 23.0
+    assert product["sodium"] == 1.775
+    assert product["protein"] == 0.05
+
+
+@pytest.mark.parametrize(
+    "stated",
+    ["sodium", "sodium=", "=1775mg"],
+    ids=["no-separator", "no-value", "no-name"],
+)
+def test_a_malformed_nutrient_pair_is_refused(make_deps, run, stated) -> None:
+    scope = run(
+        deps := make_deps(),
+        "add",
+        "--manual",
+        "--id",
+        "x",
+        "--name",
+        "X",
+        "-n",
+        stated,
+    )
+    assert deps is not None
+    assert scope.exit_code == 1
+    assert "NAME=VALUE" in scope.output
+
+
+def test_a_stated_figure_still_needs_its_unit(make_deps, run) -> None:
+    """The strict path states units outright; it does not stop requiring them."""
+    scope = run(
+        make_deps(),
+        "add",
+        "--manual",
+        "--id",
+        "x",
+        "--name",
+        "X",
+        "-n",
+        "sodium=1775",
+    )
+
+    assert scope.exit_code == 1
+    assert "no unit" in scope.output

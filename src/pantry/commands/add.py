@@ -11,7 +11,12 @@ from agentcli import UsageError, emit, json_option
 
 from pantry.commands.describe import describe
 from pantry.ids import normalize_id
-from pantry.nutrition import nutrients_for_storage, parse_amount, parse_panel
+from pantry.nutrition import (
+    nutrients_for_storage,
+    panel_from_rows,
+    parse_amount,
+    parse_panel,
+)
 from pantry.products import (
     PRODUCT_BASES,
     PRODUCT_SOURCES,
@@ -94,6 +99,18 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
     ]
 
 
+def _stated_rows(nutrients: tuple[str, ...]) -> list[tuple[str, str]]:
+    """`-n sodium=355mg` as the rows a structured source would have given."""
+    rows = []
+    for stated in nutrients:
+        name, separator, value = stated.partition("=")
+        if not separator or not name.strip() or not value.strip():
+            raise UsageError(f"--nutrient wants NAME=VALUE, not {stated!r}")
+        rows.append((name.strip(), value.strip()))
+
+    return rows
+
+
 @click.command("add")
 @click.argument("ref", required=False)
 @click.option(
@@ -103,6 +120,15 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
 )
 @click.option(
     "--id", "product_id", help="Native id for a manual entry, with no prefix."
+)
+@click.option(
+    "--nutrient",
+    "-n",
+    "nutrients",
+    multiple=True,
+    metavar="NAME=VALUE",
+    help="State one row outright, e.g. -n sodium=355mg. Repeatable, and"
+    " skips reading a panel from stdin.",
 )
 @click.option("--name", help="The product name as the label prints it.")
 @click.option("--brand", default="", help="The brand, if the label names one.")
@@ -153,6 +179,7 @@ def add(
     ctx: click.Context,
     ref: str | None,
     manual: bool,
+    nutrients: tuple[str, ...],
     product_id: str | None,
     name: str | None,
     brand: str,
@@ -203,6 +230,7 @@ def add(
                 basis=basis,
                 basis_note=basis_note,
                 zero_calorie=zero_calorie,
+                nutrients=nutrients,
             )
             held = state.store.find(product["source"], product["id"])
             product = _preserved(held, product)
@@ -303,8 +331,9 @@ def _manual_record(
     basis: str | None,
     basis_note: str | None,
     zero_calorie: bool,
+    nutrients: tuple[str, ...] = (),
 ) -> Product:
-    """Build one record from a pasted panel, no matter what refused to load.
+    """Build one record from a stated or pasted panel, whatever failed to load.
 
     A url supplies the native id, the source and the link at once; an explicit
     --id is always a manual identity.
@@ -326,9 +355,14 @@ def _manual_record(
     if not name:
         raise UsageError("a manual entry needs --name")
 
-    panel = nutrients_for_storage(
-        parse_panel(state.read_stdin(optional=zero_calorie)), zero_calorie
+    # A stated row needs none of a pasted panel's guesswork: no column to
+    # choose, no name to find in a line, and its unit is written down.
+    figures = (
+        panel_from_rows(_stated_rows(nutrients))
+        if nutrients
+        else parse_panel(state.read_stdin(optional=zero_calorie))
     )
+    panel = nutrients_for_storage(figures, zero_calorie)
 
     return build_record(
         source=reference.source if reference else "manual",
