@@ -3,8 +3,9 @@
 Food product records — per 100 g, always — with local fuzzy search, Open Food
 Facts discovery, and a CLI to add the products that are missing.
 
-Three verbs over four providers: `search` fans out, `lookup` is exact and
-offline, and `add` acquires from whichever provider claims the reference.
+Four verbs over four providers: `search` fans out, `lookup` is exact and
+offline, `add` acquires from whichever provider claims the reference, and
+`annotate` records what a held panel's figures are measured against.
 
 Pantry owns food data and nothing else: the records, the search over them, the
 sources they come from, and the commands that add new ones. Recipe arithmetic
@@ -27,6 +28,7 @@ pantry --json lookup coles 1047
 pantry add "https://www.coles.com.au/product/example-1047"
 pantry add usda:2476857
 pantry add --manual --id sourdough --name Sourdough < panel.txt
+pantry annotate coles 98548 --basis as_prepared --basis-note "per 100 mL"
 pantry guide            # the full agent-facing manual, no network needed
 ```
 
@@ -63,9 +65,17 @@ consumer that has never heard of it keeps today's behaviour. An `as_prepared`
 panel was printed for the made-up food, so scaling it by a dry weight is wrong
 by whatever the preparation adds — 47x for a stock cube. `basis_note` is the
 free text that says how to convert instead, such as "per 100 mL prepared;
-1 cube (10.5 g) makes 500 mL". Both keys are surfaced by `lookup` and
-`search`, human output and `--json` alike, and a `basis` that is neither
-value is refused rather than coerced.
+1 cube (10.5 g) makes 500 mL", and it needs a `basis` beside it: a note alone
+would leave the record structurally claiming as-sold. Both keys are surfaced
+by `lookup` and `search`, human output and `--json` alike.
+
+An unrecognised `basis`, an empty `basis_note` and a note without a basis are
+all refused, on read as well as on write. Reading is the one place this key is
+checked and the numbers are not: every other malformed figure is loud
+downstream, while an unrecognised basis would read as absent, and absent means
+as-sold. `annotate` sets both fields on a record already held, without
+re-authoring its panel, and `add --refresh` carries them across — no provider
+can put back a field only a human could supply.
 
 JSONL keys have this fixed order, because a one-product edit must remain a
 one-line diff:

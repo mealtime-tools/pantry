@@ -14,7 +14,7 @@ def _caveat(product: dict[str, Any]) -> str:
     parts = [
         str(product[key])
         for key in ("basis", "basis_note")
-        if product.get(key)
+        if product.get(key) is not None
     ]
     return f"  [{': '.join(parts)}]" if parts else ""
 

@@ -119,10 +119,19 @@ def _check_basis(product: Product) -> None:
         )
 
     note = product.get("basis_note")
-    if note is not None and not isinstance(note, str):
+    if note is None:
+        return
+
+    if not isinstance(note, str) or not note.strip():
         raise ProductError(
-            f"{_label(product)} has a non-text basis_note: {note!r}"
+            f"{_label(product)} has an unusable basis_note: {note!r}"
         )
+
+    # A note without a flag is the worst of both: the record structurally
+    # claims as-sold while its own text says otherwise, so a consumer keyed on
+    # `basis` scales by a dry weight with the conversion sitting beside it.
+    if basis is None:
+        raise ProductError(f"{_label(product)} has a basis_note but no basis")
 
 
 def _label(product: Product) -> str:
@@ -228,6 +237,14 @@ def parse_jsonl(
                 # order, which is what the shard on disk is written in.
                 parsed = {"source": source, **parsed}
             assert_identity(parsed)
+
+            # The one field checked on the way in as well as on the way out.
+            # Every other malformed figure is loud downstream, but an
+            # unrecognised basis reads as "absent", and absent means as-sold:
+            # the record would silently lose the warning it was written to
+            # carry. No frozen row holds the key, so nothing existing can
+            # start failing here.
+            _check_basis(parsed)
         except (ValueError, AttributeError) as cause:
             raise ProductError(
                 f"{label}: line {number} is invalid: {cause}"

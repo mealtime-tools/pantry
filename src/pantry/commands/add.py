@@ -29,6 +29,10 @@ from pantry.providers.retailer import DEFAULT_PAGE_BUDGET
 from pantry.session import Deps, deps, guard, wants_json
 from pantry.sites import build_record
 
+# What a refresh carries across rather than re-reading. See
+# `_carry_annotations`.
+_CARRIED = ("basis", "basis_note")
+
 
 def _human(payload: dict) -> list[str]:
     """Notes are deliberately absent: the caller echoes them either way."""
@@ -68,6 +72,21 @@ def _payload(
         "changes": changes or [],
         "notes": notes or [],
     }
+
+
+def _carry_annotations(held: Product, product: Product) -> Product:
+    """Keep the fields no provider can ever re-supply.
+
+    Every other field is source-derived, so a refresh re-reads it. These two
+    come from nowhere but a human reading the pack, which means a refresh that
+    dropped them would turn a visible warning back into a silent 47x error.
+    """
+    carried = {
+        key: held[key]
+        for key in _CARRIED
+        if held.get(key) is not None and product.get(key) is None
+    }
+    return {**product, **carried} if carried else product
 
 
 def _changed_fields(before: Product, after: Product) -> list[str]:
@@ -165,10 +184,18 @@ def add(
     provider: Provider | None = None
 
     with guard(json_output, lambda: provider.report() if provider else []):
+        # Checked on `is not None` and before the reference is resolved: an
+        # empty note is still a flag that cannot apply here, and refusing it
+        # after a page load would spend a request the user cannot get back.
         # Nothing on a retailer page or in an API response declares a basis,
         # so accepting one there would store a claim no source made.
-        if (basis or basis_note) and not manual:
-            raise UsageError("--basis and --basis-note need --manual")
+        if (basis is not None or basis_note is not None) and not manual:
+            raise UsageError(
+                "--basis and --basis-note need --manual; "
+                "use `pantry annotate` for a record already held"
+            )
+        if basis_note is not None and basis is None:
+            raise UsageError("--basis-note needs --basis")
 
         reference = resolve_reference(ref) if ref else None
 
@@ -232,6 +259,8 @@ def _acquire(
     """Spend the request, then persist the moment the answer parses."""
     try:
         product = provider.acquire(reference, options)
+        if held:
+            product = _carry_annotations(held, product)
         changes = _changed_fields(held, product) if held else []
 
         # A refresh that changed nothing leaves the localstore alone,

@@ -23,11 +23,11 @@ Identity is the pair `(source, id)`. Sources are `coles`, `woolworths`, `afcd`,
 strings compared exactly — leading zeros are significant, and no id carries a
 source prefix. Keep both halves of any result you intend to reuse.
 
-Three verbs: `search`, `lookup`, `add`.
+Four verbs: `search`, `lookup`, `add`, `annotate`.
 
 `--json` makes stdout exactly one JSON object and is accepted before or after
-the subcommand. It applies to `search`, `lookup` and `add`. Never parse the
-human output.
+the subcommand. It applies to `search`, `lookup`, `add` and `annotate`. Never
+parse the human output.
 
 ## Providers
 
@@ -167,15 +167,33 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   header names "per 100 g" first.
 - `--basis as_prepared` with `--basis-note "per 100 mL prepared; 1 cube
   (10.5 g) makes 500 mL"` records that the panel is not on an as-sold basis.
-  Both need `--manual`: no retailer page or API response declares a basis, so
-  reading one there would store a claim no source made. Use them whenever a
-  label computes its figures on added water — a serving size like
-  `300 g (100 g stick + 200 mL water)`, or a column headed "per 100 mL
-  prepared".
+  `--basis-note` needs `--basis`, and both need `--manual`: no retailer page or
+  API response declares a basis, so reading one there would store a claim no
+  source made. Use them whenever a label computes its figures on added
+  water — a serving size like `300 g (100 g stick + 200 mL water)`, or a
+  column headed "per 100 mL prepared". For a record **already held**, use `annotate`;
+  re-entering the panel would drop every field the new panel does not repeat.
 
 There is no age-based refresh. `--refresh` requires the identity to be held
 already, reports `changes`, and leaves the store untouched when nothing
-changed or the load failed.
+changed or the load failed. `basis` and `basis_note` survive a refresh: no
+provider can re-supply a field only a human could have written.
+
+## Annotate a held record
+
+```sh
+pantry annotate coles 98548 --basis as_prepared \
+  --basis-note "per 100 mL prepared; 1 cube (10.5 g) makes 500 mL"
+```
+
+Sets the basis of a record already held, in place, offline, keeping every
+other field exactly as it was. `--basis` is required and `--basis-note` is
+optional; omitting the note leaves whatever the record carried. `data` is
+`{"annotated":true,"source","id","product":{...}}`. An identity that is not
+held is a refusal at exit 1, never a fetch. Prefer this to `add --manual`
+whenever the record exists: `--manual` re-authors it from the panel you paste,
+which is how a wrong field is removed, and also how a pack size the note
+converts from gets lost.
 
 ## What a retailer page costs
 
@@ -204,8 +222,10 @@ panel and is refused the moment any value is non-zero.
 
 A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of anything
-per 100 g, three macros totalling more than 105 g per 100 g, or a `basis`
-that is neither `as_sold` nor `as_prepared`.
+per 100 g, three macros totalling more than 105 g per 100 g, a `basis` that is
+neither `as_sold` nor `as_prepared`, an empty `basis_note`, or a `basis_note`
+with no `basis`. The basis rules apply when a record is read as well as when
+it is written.
 
 ## Storage
 

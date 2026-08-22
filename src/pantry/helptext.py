@@ -3,10 +3,11 @@
 GUIDE = """
 pantry — food product records, per 100 g, always.
 
-THREE VERBS
-  search <query>     every enabled provider; local unless --remote
-  lookup <src> <id>  exact identity, local only, never a request
-  add <ref>          acquire one record and store it
+FOUR VERBS
+  search <query>          every enabled provider; local unless --remote
+  lookup <src> <id>       exact identity, local only, never a request
+  add <ref>               acquire one record and store it
+  annotate <src> <id>     set the basis of a record already held
 
 IDENTITY
   A product is the pair (source, id). Sources are coles, woolworths, afcd,
@@ -23,8 +24,10 @@ NUTRIENTS
   the made-up food, so scaling it by a dry weight is wrong by whatever the
   preparation adds -- 47x for a stock cube. Read `basis_note` for the
   conversion instead ("per 100 mL prepared; 1 cube (10.5 g) makes 500 mL").
-  Both are shown by search and lookup when present, and a basis that is
-  neither value is refused.
+  Both are shown by search and lookup when present. A basis that is neither
+  value, an empty note, and a note with no basis are all refused -- when a
+  record is read as well as when it is written, because an unrecognised basis
+  would otherwise read as absent, and absent means as-sold.
 
 PROVIDERS
   local          the frozen shards plus your own. Search. No network.
@@ -95,7 +98,22 @@ ADD ONE RECORD
   not a dead end. Two-column labels are handled: the per-100 g column wins,
   which is the last column unless the header names "per 100 g" first. When
   that column is computed on added water, say so with --basis as_prepared and
-  --basis-note; both need --manual, because no page or API declares a basis.
+  --basis-note; --basis-note needs --basis, and both need --manual, because no
+  page or API declares a basis. For a record already held, use `annotate`
+  instead: --manual re-authors the record from the panel you paste, which is
+  how a wrong field is removed and also how a pack size gets lost.
+
+  basis and basis_note survive --refresh. Every other field is re-read from
+  the source; these two came from a human and no provider can put them back.
+
+ANNOTATE A HELD RECORD
+  pantry annotate coles 98548 --basis as_prepared \
+    --basis-note "per 100 mL prepared; 1 cube (10.5 g) makes 500 mL"
+
+  Sets the basis of a record already held, in place and offline, keeping every
+  other field as it was. --basis is required; an absent --basis-note leaves
+  whatever the record carried. Emits {"annotated":true,"source":...,"id":...,
+  "product":{...}}. An identity that is not held is a refusal, not a fetch.
 
 WHAT A RETAILER PAGE COSTS
   The page budget defaults to 4 (--budget N). It is claimed before the request
