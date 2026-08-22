@@ -84,14 +84,15 @@ CUBES_URL = "https://www.coles.com.au/product/example-98548"
 def test_basis_round_trips_in_the_fixed_key_order() -> None:
     written = format_jsonl([PREPARED], source="manual")
 
-    # Beside the figures it qualifies, and before the packaging fields: a
-    # moved key would turn a one-product edit into a whole-file diff.
+    # Last, after the figures it qualifies, so a line read by eye carries the
+    # caveat beside the numbers it applies to. A moved key would turn a
+    # one-product edit into a whole-file diff.
     assert written == (
         '{"id":"98548","name":"Vegetable Stock Cubes","brand":"Massel",'
-        '"kj":23,"fat":0.35,"carbs":0.53,"protein":0,"kcal":5.5,'
-        f'"basis":"as_prepared","basis_note":"{NOTE}",'
         '"url":"https://example.com/ultracube-vegetable",'
-        '"total_size":105,"total_unit":"g"}\n'
+        '"total_size":105,"total_unit":"g",'
+        '"kcal":5.5,"kj":23,"protein":0,"fat":0.35,"carbs":0.53,'
+        f'"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )
 
     read_back = parse_jsonl(written, source="manual")
@@ -120,8 +121,8 @@ def test_a_record_with_no_basis_behaves_exactly_as_before() -> None:
     assert_exportable_product(AS_SOLD)
 
     assert format_jsonl([AS_SOLD], source="manual") == (
-        '{"id":"loaf","name":"Loaf","brand":"","fat":3.4,"carbs":39.2,'
-        '"protein":9.5,"kcal":239}\n'
+        '{"id":"loaf","name":"Loaf","brand":"",'
+        '"kcal":239,"protein":9.5,"fat":3.4,"carbs":39.2}\n'
     )
 
     result = as_result(AS_SOLD)
@@ -196,7 +197,7 @@ def test_manual_add_records_the_basis_it_is_told(
     assert added.exit_code == 0, added.output
     written = (store_path / "manual.jsonl").read_text(encoding="utf-8")
     assert written.endswith(
-        f'"kcal":5.5,"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
+        f'"carbs":0.53,"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )
 
 
@@ -355,10 +356,11 @@ def test_re_adding_a_record_keeps_the_fields_the_paste_leaves_out(
     assert added.exit_code == 0, added.output
     assert (store_path / "coles.jsonl").read_text(encoding="utf-8") == (
         '{"id":"98548","name":"Vegetable Stock Cubes","brand":"Massel",'
-        '"kj":23,"fat":0.35,"carbs":0.53,"protein":0,"fiber":0.035,'
-        f'"sugar":0.32,"kcal":5.5,"basis":"as_prepared","basis_note":"{NOTE}",'
         '"url":"https://www.coles.com.au/product/example-98548",'
-        '"total_size":105,"total_unit":"g"}\n'
+        '"total_size":105,"total_unit":"g",'
+        '"kcal":5.5,"kj":23,"protein":0,"fat":0.35,"carbs":0.53,'
+        f'"fiber":0.035,"sugar":0.32,'
+        f'"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )
 
     # Read back through the store: nothing was lost and the caveat is there.

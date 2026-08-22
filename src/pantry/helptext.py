@@ -15,12 +15,14 @@ IDENTITY
   a source prefix. Keep both halves of a search result.
 
 NUTRIENTS
-  Every figure in every record is per 100 g. Scale by grams / 100 at the point
-  of display. Never store a pre-scaled value.
+  Every figure in every record is grams per 100 g. One rule, no exceptions.
+  Scale by grams / 100 at the point of display. Never store a pre-scaled
+  value. An absent nutrient is unknown, never zero.
 
-  Every figure is grams except sodium, which is milligrams per 100 g: the unit
-  its label row prints, so the common case needs no conversion. An absent
-  sodium is unknown, never zero -- the frozen shards predate the key.
+  Energy and the four macros are on every record. Every other nutrient comes
+  from a vocabulary of accepted names -- fiber, sodium, sugar -- and a name
+  outside it is refused rather than stored: a misspelling stores cleanly and
+  then nothing ever finds the nutrient again.
 
   Per 100 g as sold, unless the record carries `basis`: as_sold or
   as_prepared, absent meaning as_sold. An as_prepared panel was printed for
@@ -97,15 +99,16 @@ ADD ONE RECORD
   and would let your own entry for the same barcode overwrite it. It is
   community data, not proof of current availability.
 
-  A Sodium row is read in milligrams, converting a gram figure such as
-  "Sodium 0.4g" to 400 and storing a trace bound such as "LESS THAN 5mg" as
-  the bound. A Salt row is not read at all: salt is 2.5 times its sodium, and
-  reading one as the other would overstate it by 150 percent.
+  A row printed in milligrams is converted to the grams a record holds, so
+  "Sodium 400mg" and "Sodium 0.4g" both store 0.4, and a trace bound such as
+  "LESS THAN 5mg" stores the bound. A Salt row is not read at all: salt is 2.5
+  times its sodium, and reading one as the other would overstate it by 150
+  percent.
 
-  To be read, the row must open its line and be followed by its figure. That
-  rules out an additive -- "Sodium Bicarbonate (500)", whose code looks like a
-  plausible milligram figure -- and with it "Sodium (as salt)", "Sodium (g)
-  0.4" (only a unit on the figure can be converted) and a row wrapped in
+  To be read, a Sodium row must open its line and be followed by its figure.
+  That rules out an additive -- "Sodium Bicarbonate (500)", which also matches
+  the carbs row on "bicarbonate" -- and with it "Sodium (as salt)", "Sodium
+  (g) 0.4" (only a unit on the figure is converted) and a row wrapped in
   markup. A declined row is absent from the record rather than guessed at, and
   nothing warns about it.
 
@@ -141,10 +144,10 @@ NEVER INFER ZEROS
   A missing, malformed or unreadable nutrition value is refused, not coerced.
   An inferred zero silently under-counts every recipe downstream. The one
   exception is --zero-calorie, which accepts only an absent or all-zero panel
-  and is refused the moment any value is non-zero. Sodium is exempt from that
-  one check: it carries no energy, so table salt is a genuine 0 kcal record
-  with 38,758 mg of it. Its own ceiling still applies -- 100,000 mg, being
-  100 g of sodium per 100 g.
+  and is refused the moment an energy-bearing value is non-zero. A
+  calorie-free nutrient is exempt: sodium carries no energy, so table salt is
+  a genuine 0 kcal record with 38.758 g of it. Sugar is not exempt, and the
+  100 g per 100 g ceiling still applies to every nutrient alike.
 
 STORAGE
   Everything added writes immediately under $XDG_CONFIG_HOME/pantry, or
