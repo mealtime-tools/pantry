@@ -220,10 +220,9 @@ def nutrients_for_storage(panel: dict[str, float]) -> dict[str, float]:
         if key not in ("kcal", "kj") and value > 100:
             raise NutritionError(f"nutrition panel has invalid {key}: {value}")
 
-    macros = [panel.get(key) for key in ("protein", "fat", "carbs")]
-    if (
-        all(value is not None for value in macros)
-        and sum(macros) > _MASS_TOLERANCE
-    ):
+    macro_vals = [
+        panel[key] for key in ("protein", "fat", "carbs") if key in panel
+    ]
+    if len(macro_vals) == 3 and sum(macro_vals) > _MASS_TOLERANCE:
         raise NutritionError("nutrition panel has more than 100 g of macros")
     return panel

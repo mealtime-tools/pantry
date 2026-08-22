@@ -97,7 +97,7 @@ def _parse_hit(value: Any) -> dict | None:
 
     brand = _brand(value.get("brands"))
     quantity = value.get("quantity")
-    result: dict[str, str | Mapping[str, float | str]] = {
+    result: dict[str, Any] = {
         "source": "openfoodfacts",
         "id": product_id,
         "name": label,
