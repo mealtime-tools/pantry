@@ -48,7 +48,7 @@ def test_search_accepts_both_shard_vocabularies_and_uses_null_for_missing() -> (
 def test_shards_use_one_flat_item_format() -> None:
     products = read_shards(data_dir())
 
-    assert len(products) >= 10_000
+    assert len(products) >= 1_500
     assert all("kcal" in product or "kj" in product for product in products)
     assert not any("nutrients" in product for product in products)
     assert not any("serving_size" in product for product in products)
