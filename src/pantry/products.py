@@ -106,38 +106,20 @@ def _check_number(product: Product, key: str, optional: bool) -> None:
         raise ProductError(f"{_label(product)} has invalid {key}: {value}")
 
 
-def _check_basis_value(product: Product) -> None:
+def _check_basis(product: Product) -> None:
     """Refuse a basis this format does not define.
 
     Coerced or ignored, an unknown value reads as "no caveat" — which is
-    exactly the silent scaling error the key exists to make visible. This is
-    the one rule strict enough to enforce when a record is merely read.
+    exactly the silent scaling error the key exists to make visible. The one
+    rule strict enough to run when a record is merely read, and the only thing
+    checked about the pair: `basis_note` is free text, and a note a reader can
+    see is not worth failing the shard it sits in.
     """
     basis = product.get("basis")
     if basis is not None and basis not in PRODUCT_BASES:
         raise ProductError(
             f"{_label(product)} has unsupported basis: {basis!r}"
         )
-
-
-def _check_basis(product: Product) -> None:
-    """Refuse a basis, or a note, this format does not define."""
-    _check_basis_value(product)
-
-    note = product.get("basis_note")
-    if note is None:
-        return
-
-    if not isinstance(note, str) or not note.strip():
-        raise ProductError(
-            f"{_label(product)} has an unusable basis_note: {note!r}"
-        )
-
-    # A note without a flag is the worst of both: the record structurally
-    # claims as-sold while its own text says otherwise, so a consumer keyed on
-    # `basis` scales by a dry weight with the conversion sitting beside it.
-    if product.get("basis") is None:
-        raise ProductError(f"{_label(product)} has a basis_note but no basis")
 
 
 def _label(product: Product) -> str:
@@ -244,16 +226,12 @@ def parse_jsonl(
                 parsed = {"source": source, **parsed}
             assert_identity(parsed)
 
-            # The value, and nothing else about the basis. An unrecognised
-            # one reads as "absent", and absent means as-sold, so the record
-            # would silently lose the warning it was written to carry. The
-            # note rules stay on the write path deliberately: an empty note,
-            # or one with no basis, is already visible in `lookup` and
-            # `search` output, and refusing a whole shard over a mistake a
-            # reader can see would take every other row down with it — this
-            # command included, since finding one record means reading them
-            # all.
-            _check_basis_value(parsed)
+            # The one key checked on the way in: an unrecognised basis reads
+            # as "absent", and absent means as-sold, so the record would
+            # silently lose the warning it was written to carry. Nothing else
+            # is, because a whole shard failing over one row would take every
+            # other record down with it.
+            _check_basis(parsed)
         except (ValueError, AttributeError) as cause:
             raise ProductError(
                 f"{label}: line {number} is invalid: {cause}"

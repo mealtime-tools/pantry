@@ -3,9 +3,8 @@
 Food product records — per 100 g, always — with local fuzzy search, Open Food
 Facts discovery, and a CLI to add the products that are missing.
 
-Four verbs over four providers: `search` fans out, `lookup` is exact and
-offline, `add` acquires from whichever provider claims the reference, and
-`annotate` records what a held panel's figures are measured against.
+Three verbs over four providers: `search` fans out, `lookup` is exact and
+offline, and `add` acquires from whichever provider claims the reference.
 
 Pantry owns food data and nothing else: the records, the search over them, the
 sources they come from, and the commands that add new ones. Recipe arithmetic
@@ -28,7 +27,6 @@ pantry --json lookup coles 1047
 pantry add "https://www.coles.com.au/product/example-1047"
 pantry add usda:2476857
 pantry add --manual --id sourdough --name Sourdough < panel.txt
-pantry annotate coles 98548 --basis as_prepared --basis-note "per 100 mL"
 pantry guide            # the full agent-facing manual, no network needed
 ```
 
@@ -69,20 +67,16 @@ free text that says how to convert instead, such as "per 100 mL prepared;
 would leave the record structurally claiming as-sold. Both keys are surfaced
 by `lookup` and `search`, human output and `--json` alike.
 
-An unrecognised `basis`, an empty `basis_note` and a note without a basis are
-all refused when a record is written. An unrecognised `basis` is refused when
-one is *read*, too — the one place this key is checked and the numbers are
-not, because every other malformed figure is loud downstream while an
-unrecognised basis reads as absent, and absent means as-sold. The note rules
-stay on the write path: an empty note, or one with no basis, is already
-visible in `lookup` and `search` output, and failing a whole shard over a
-mistake a reader can see would take every other row down with it.
+An unrecognised `basis` is refused when a record is written and when one is
+*read* — the one place this key is checked and the numbers are not, because
+every other malformed figure is loud downstream while an unrecognised basis
+reads as absent, and absent means as-sold. `basis_note` is free text and is
+not checked: a note a reader can see in `lookup` output is not worth failing
+the whole shard it sits in.
 
-`annotate` sets both fields on a record already held, without re-authoring its
-panel, and `add --refresh` carries them across — no provider can put back a
-field only a human could supply. It checks shape rather than plausibility: an
-edit in place re-measures nothing, and 141 frozen rows fail today's nutrition
-rules, disproportionately the dry goods whose basis most needs recording.
+`add` keeps every field a held record carries and the new reading does not
+state, so re-adding a record is how it acquires a basis, and a `--refresh`
+cannot drop one no provider could put back. Nothing removes a field.
 
 JSONL keys have this fixed order, because a one-product edit must remain a
 one-line diff:

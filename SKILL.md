@@ -23,11 +23,10 @@ Identity is the pair `(source, id)`. Sources are `coles`, `woolworths`, `afcd`,
 strings compared exactly — leading zeros are significant, and no id carries a
 source prefix. Keep both halves of any result you intend to reuse.
 
-Four verbs: `search`, `lookup`, `add`, `annotate`.
+Three verbs: `search`, `lookup`, `add`.
 
 `--json` makes stdout exactly one JSON object and is accepted before or after
-the subcommand. It applies to `search`, `lookup`, `add` and `annotate`. Never
-parse the human output.
+the subcommand. It applies to all three. Never parse the human output.
 
 ## Providers
 
@@ -171,41 +170,25 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   API response declares a basis, so reading one there would store a claim no
   source made. Use them whenever a label computes its figures on added
   water — a serving size like `300 g (100 g stick + 200 mL water)`, or a
-  column headed "per 100 mL prepared". For a record **already held**, use `annotate`;
-  re-entering the panel would drop every field the new panel does not repeat.
+  column headed "per 100 mL prepared".
+
+## Adding a record that is already held
+
+Adding an identity the store already holds keeps every field the new reading
+does not state — `--manual` and `--refresh` alike. So to record the basis of a
+held record, add it again with `--basis`: its pack size, url and unmentioned
+rows survive the paste. For a retailer record pass its url rather than `--id`,
+which is what keeps the identity. The same rule is why no provider can drop a
+`basis` a human supplied.
+
+Nothing removes a field. Correcting one means restating it, and blanking a
+note means `--basis-note ""`. A record whose panel today's rules would
+refuse — 141 frozen Coles rows, mostly dry goods — cannot be re-added at all
+without fixing its figures first.
 
 There is no age-based refresh. `--refresh` requires the identity to be held
 already, reports `changes`, and leaves the store untouched when nothing
-changed or the load failed. `basis` and `basis_note` survive a refresh: no
-provider can re-supply a field only a human could have written.
-
-## Annotate a held record
-
-```sh
-pantry annotate coles 98548 --basis as_prepared \
-  --basis-note "per 100 mL prepared; 1 cube (10.5 g) makes 500 mL"
-```
-
-Sets the basis of a record already held, in place, offline, keeping every
-other field exactly as it was. `--basis` is required and `--basis-note` is
-optional; omitting the note leaves whatever the record carried. `data` is
-`{"annotated":true,"source","id","product":{...}}`. An identity that is not
-held is a refusal at exit 1, never a fetch. Prefer this to `add --manual`
-whenever the record exists: `--manual` re-authors it from the panel you paste,
-which is how a wrong field is removed, and also how a pack size the note
-converts from gets lost.
-
-`--clear-basis-note` drops the note a record carries, and is the only way to
-remove one — an empty note is refused. Changing the basis of a record that
-carries a note is refused unless you pass `--basis-note` or
-`--clear-basis-note` with it: a note explains figures on one basis, and
-`as_sold` beside "per 100 mL prepared" is worse than no note at all.
-
-Unlike `add`, this verb checks shape and not plausibility, because it
-re-measures nothing. So a record whose panel today's rules would refuse — 141
-frozen Coles rows, mostly dry goods, are in that state — can still be
-annotated, which is the point: warning about such a record must not require
-changing its figures.
+changed or the load failed.
 
 ## What a retailer page costs
 
@@ -234,12 +217,11 @@ panel and is refused the moment any value is non-zero.
 
 A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of anything
-per 100 g, three macros totalling more than 105 g per 100 g, a `basis` that is
-neither `as_sold` nor `as_prepared`, an empty `basis_note`, or a `basis_note`
-with no `basis`. Only the first of those three applies when a record is
-**read**: an unrecognised basis would read as absent, and absent means
-as-sold, while the other two are visible in output. A shard is never failed
-over a mistake you can see in `lookup`.
+per 100 g, three macros totalling more than 105 g per 100 g, or a `basis` that
+is neither `as_sold` nor `as_prepared`. The basis is the one of those also
+checked when a record is **read**: an unrecognised value would read as absent,
+and absent means as-sold. `basis_note` is free text and is not checked at all;
+a shard is never failed over a mistake you can see in `lookup`.
 
 ## Storage
 

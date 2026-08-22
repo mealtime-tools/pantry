@@ -10,7 +10,6 @@ from agentcli import JsonAwareGroup, guide_command, skill_group
 from pantry import data, helptext
 from pantry.browser import BrowserTransport, launch_chrome
 from pantry.commands.add import add
-from pantry.commands.annotate import annotate
 from pantry.commands.lookup import lookup
 from pantry.commands.search import search
 from pantry.open_food_facts import OpenFoodFacts, cache_dir
@@ -117,7 +116,6 @@ for command in (
     search,
     lookup,
     add,
-    annotate,
     guide_command(helptext.GUIDE),
     skill_group(name="pantry", package="pantry"),
 ):
