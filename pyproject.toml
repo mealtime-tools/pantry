@@ -21,8 +21,20 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
-dependencies = ["click-agentcli>=0.1.0",
+dependencies = ["click-agentcli>=0.1.0", "mealtime-nutrition>=0.1.0",
     "python-dotenv>=1.0", "click>=8.1", "rapidfuzz>=3.9"]
+
+# Not on PyPI yet, so the shared nutrition domain is resolved from the sibling
+# checkout, and CI checks it out beside this one. Editable because the two move
+# together while the seam settles.
+#
+# RELEASE BLOCKER: `[tool.uv.sources]` is not written into a wheel, so a release
+# cut from here would declare `mealtime-nutrition>=0.1.0` and find nothing on
+# PyPI. This entry has to become a version pin first, and the order is
+# nutrition, then pantry, then recipes -- each one reads the names the one
+# before it writes.
+[tool.uv.sources]
+mealtime-nutrition = { path = "../nutrition", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/mealtime-tools/pantry"

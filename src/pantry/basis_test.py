@@ -32,9 +32,8 @@ PREPARED = {
     "id": "98548",
     "name": "Vegetable Stock Cubes",
     "brand": "Massel",
-    "kj": 23,
     "fat": 0.35,
-    "carbs": 0.53,
+    "carbohydrates": 0.53,
     "protein": 0,
     "kcal": 5.5,
     "basis": "as_prepared",
@@ -52,10 +51,13 @@ AS_SOLD = {
     "kcal": 239.0,
     "protein": 9.5,
     "fat": 3.4,
-    "carbs": 39.2,
+    "carbohydrates": 39.2,
 }
 
-PANEL = "Energy 23kJ\nProtein 0g\nFat 0.35g\nCarbohydrate 0.53g"
+# A panel as another tool would hand it over: JSON, grams, kcal.
+PANEL = json.dumps(
+    {"kcal": 5.5, "protein": 0, "fat": 0.35, "carbohydrates": 0.53}
+)
 
 NOTE = "per 100 mL prepared; 1 cube (10.5 g) makes 500 mL"
 
@@ -66,11 +68,10 @@ HELD_CUBES = {
     "id": "98548",
     "name": "Vegetable Stock Cubes",
     "brand": "Massel",
-    "kj": 23,
     "fat": 0.35,
-    "carbs": 0.53,
+    "carbohydrates": 0.53,
     "protein": 0,
-    "fiber": 0.035,
+    "dietary_fiber": 0.035,
     "sugar": 0.32,
     "kcal": 5.5,
     "url": "https://www.coles.com.au/product/example-98548",
@@ -91,7 +92,7 @@ def test_basis_round_trips_in_the_fixed_key_order() -> None:
         '{"id":"98548","name":"Vegetable Stock Cubes","brand":"Massel",'
         '"url":"https://example.com/ultracube-vegetable",'
         '"total_size":105,"total_unit":"g",'
-        '"kcal":5.5,"kj":23,"protein":0,"fat":0.35,"carbs":0.53,'
+        '"kcal":5.5,"protein":0,"fat":0.35,"carbohydrates":0.53,'
         f'"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )
 
@@ -122,7 +123,7 @@ def test_a_record_with_no_basis_behaves_exactly_as_before() -> None:
 
     assert format_jsonl([AS_SOLD], source="manual") == (
         '{"id":"loaf","name":"Loaf","brand":"",'
-        '"kcal":239,"protein":9.5,"fat":3.4,"carbs":39.2}\n'
+        '"kcal":239,"protein":9.5,"fat":3.4,"carbohydrates":39.2}\n'
     )
 
     result = as_result(AS_SOLD)
@@ -197,7 +198,7 @@ def test_manual_add_records_the_basis_it_is_told(
     assert added.exit_code == 0, added.output
     written = (store_path / "manual.jsonl").read_text(encoding="utf-8")
     assert written.endswith(
-        f'"carbs":0.53,"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
+        f'"carbohydrates":0.53,"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )
 
 
@@ -305,11 +306,11 @@ def test_a_visible_basis_mistake_stays_readable(
     """
     legacy = (
         '{"id":"legacy","name":"Legacy","brand":"","kcal":5.5,"protein":0,'
-        f'"fat":0,"carbs":0,"basis_note":"{NOTE}"}}\n'
+        f'"fat":0,"carbohydrates":0,"basis_note":"{NOTE}"}}\n'
     )
     good = (
         '{"id":"good","name":"Good","brand":"","kcal":100,"protein":5,'
-        '"fat":2,"carbs":10}\n'
+        '"fat":2,"carbohydrates":10}\n'
     )
     store_path.mkdir(parents=True, exist_ok=True)
     (store_path / "manual.jsonl").write_text(legacy + good, encoding="utf-8")
@@ -358,8 +359,8 @@ def test_re_adding_a_record_keeps_the_fields_the_paste_leaves_out(
         '{"id":"98548","name":"Vegetable Stock Cubes","brand":"Massel",'
         '"url":"https://www.coles.com.au/product/example-98548",'
         '"total_size":105,"total_unit":"g",'
-        '"kcal":5.5,"kj":23,"protein":0,"fat":0.35,"carbs":0.53,'
-        f'"fiber":0.035,"sugar":0.32,'
+        '"kcal":5.5,"protein":0,"fat":0.35,"carbohydrates":0.53,'
+        f'"dietary_fiber":0.035,"sugar":0.32,'
         f'"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )
 

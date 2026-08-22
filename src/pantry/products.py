@@ -5,14 +5,16 @@ by `grams / 100` at the point of display, and storing a pre-scaled value or a
 second unit would make editing an amount wrong in a way no test would catch.
 
 Structural fields are enumerated because each is validated in its own way.
-Energy and the four macros are enumerated because they are cross-checked
+Energy and the three macros are enumerated because they are cross-checked
 against each other. Every other nutrient is open, governed by the vocabulary
-in `pantry.nutrition`.
+the mealtime tools share.
 """
 
 import json
 import math
 from typing import Any
+
+from nutrition import energy
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
@@ -58,10 +60,19 @@ PRODUCT_KEYS = (
     "total_unit",
 )
 
-# Energy and the four macros, written next. Enumerated where the vocabulary
+# Energy and the three macros, written next. Enumerated where the vocabulary
 # nutrients are not, because these are the figures cross-checked against each
-# other and against the 100 g the panel describes.
-CORE_NUTRIENTS = ("kcal", "kj", "protein", "fat", "carbs")
+# other and against the 100 g the panel describes. The names and their order
+# come from the shared vocabulary, so a rename there is a rename here.
+#
+# `energy.REQUIRED` and not `energy.KCAL_PER_GRAM`: alcohol carries an Atwater
+# factor without being one of the three every panel states, so requiring it
+# here would refuse every record that is not a drink.
+# The figures every record carries, so a consumer may default them and a
+# panel missing one is refused. Energy is calories only: kilojoules are
+# `kcal * 4.184` exactly, and a second field for a derived figure is a second
+# thing to keep in step.
+CORE_FIGURES = ("kcal", *energy.REQUIRED)
 
 # Written last, after the figures they qualify, so a line read by eye carries
 # the caveat beside the numbers it applies to.
@@ -69,12 +80,11 @@ BASIS_KEYS = ("basis", "basis_note")
 
 Product = dict[str, Any]
 
-_REQUIRED_NUMBERS = ("kcal", "protein", "fat", "carbs")
+_REQUIRED_NUMBERS = CORE_FIGURES
 
 # Figures that may be absent and are not nutrients, so the vocabulary rules do
-# not apply: `kj` is stored only when a label printed it, and a pack size is a
-# mass rather than a share of one.
-_OPTIONAL_SIZES = ("kj", "serving_size", "total_size")
+# not apply: a pack size is a mass rather than a share of one.
+_OPTIONAL_SIZES = ("serving_size", "total_size")
 
 # Grams per 100 g, so 100 is the ceiling for every nutrient alike. Pure table
 # salt is only 38.758 g of sodium, so nothing edible comes near it.
@@ -84,7 +94,7 @@ _MAX_PER_100G = 100
 # a misspelling far more often than it is a new field, and `sodum` would store
 # cleanly and then no consumer would ever find the sodium again.
 _ALLOWED_KEYS = frozenset(
-    (*PRODUCT_KEYS, *CORE_NUTRIENTS, *NUTRIENTS, *BASIS_KEYS)
+    (*PRODUCT_KEYS, *CORE_FIGURES, *NUTRIENTS, *BASIS_KEYS)
 )
 
 
@@ -168,7 +178,7 @@ def record_keys(product: Product) -> tuple[str, ...]:
     enumerate them: adding one changes no order and diffs no other line.
     """
     held = sorted(key for key in product if key in NUTRIENTS)
-    return (*PRODUCT_KEYS, *CORE_NUTRIENTS, *held, *BASIS_KEYS)
+    return (*PRODUCT_KEYS, *CORE_FIGURES, *held, *BASIS_KEYS)
 
 
 def assert_product_record(product: Product) -> None:
@@ -176,7 +186,9 @@ def assert_product_record(product: Product) -> None:
 
     141 of those rows fail today's stricter nutrition rules and none of them
     can be re-scraped, so the shard is validated for shape and not for
-    plausibility.
+    plausibility. A further 635 of the 11,885 cannot account for their own
+    stated energy, which is why that check is a warning rather than a rule:
+    see `nutrition.reconciliation_note`.
     """
     assert_identity(product)
     _check_keys(product)
@@ -204,7 +216,7 @@ def assert_exportable_product(product: Product) -> None:
     # calorie-free nutrient is exempt: table salt is a genuine 0 kcal record
     # with 38.758 g of sodium in it.
     if product.get("kcal") == 0:
-        claimed = (*CORE_NUTRIENTS, *NUTRIENTS)
+        claimed = (*CORE_FIGURES, *NUTRIENTS)
         for key in (k for k in claimed if k not in CALORIE_FREE):
             value = product.get(key)
             if value is not None and value != 0:

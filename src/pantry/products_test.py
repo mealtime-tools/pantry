@@ -19,11 +19,11 @@ from pantry.products import (
 SHARDS = {
     "coles": (
         10297,
-        "eb55fa163c815301f8673e06e282c449deea9d12bde7e0f67e2b6930d187c12d",
+        "daaff67f11b73b64240e881df6fcc51802d93f69a7435358b8cd17e9f354af4d",
     ),
     "afcd": (
         1588,
-        "c59184d79adcabe49762e34514144f468ba1e0cdd5770da167f584e6f63a6455",
+        "cb43ef1526ca490cf9a2deea9026c860442f1dab8e7a19ef05fd90786c637612",
     ),
 }
 
@@ -43,9 +43,9 @@ def test_frozen_shards_reserialize_byte_identically(source: str) -> None:
     products = parse_jsonl(raw.decode("utf-8"), source=source, label=source)
     assert len(products) == rows
 
-    # Row 8520 of the Coles shard carries "fiber":0.00001, which `json.dumps`
-    # would write as 1e-05: this comparison is what pins the JS float format,
-    # the key order and the record order all at once.
+    # Row 8520 of the Coles shard carries "dietary_fiber":0.00001, which
+    # `json.dumps` would write as 1e-05: this comparison is what pins the JS
+    # float format, the key order and the record order all at once.
     assert format_jsonl(products, source=source).encode("utf-8") == raw
 
 
@@ -60,7 +60,7 @@ def test_leading_zero_ids_stay_distinct_and_sort_by_length() -> None:
             "kcal": 1.0,
             "protein": 0.0,
             "fat": 0.0,
-            "carbs": 0.0,
+            "carbohydrates": 0.0,
         }
         for i in ids
     ]
@@ -86,7 +86,7 @@ STOCK_CUBE = {
     "kcal": 200.0,
     "protein": 5.0,
     "fat": 1.0,
-    "carbs": 40.0,
+    "carbohydrates": 40.0,
 }
 
 
@@ -99,7 +99,7 @@ def test_vocabulary_nutrients_are_written_last_and_sorted() -> None:
     assert written.startswith(
         '{"source":"manual","id":"stock-cube",'
         '"name":"Vegetable Stock Cube","brand":"Example",'
-        '"kcal":200,"protein":5,"fat":1,"carbs":40,'
+        '"kcal":200,"protein":5,"fat":1,"carbohydrates":40,'
         '"sodium":17.75,"sugar":2}'
     )
 
@@ -114,7 +114,7 @@ def test_a_record_with_no_sodium_stays_without_one() -> None:
     assert parse_jsonl(format_jsonl([plain]))[0] == plain
 
 
-@pytest.mark.parametrize("key", ["fiber", "sodium", "sugar"])
+@pytest.mark.parametrize("key", ["dietary_fiber", "sodium", "sugar"])
 @pytest.mark.parametrize(
     "value",
     [-1, "355", float("inf"), 101],
@@ -147,7 +147,7 @@ TABLE_SALT = {
     "kcal": 0,
     "protein": 0,
     "fat": 0,
-    "carbs": 0,
+    "carbohydrates": 0,
     "sodium": 38.758,
 }
 

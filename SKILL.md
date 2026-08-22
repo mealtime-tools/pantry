@@ -84,12 +84,15 @@ visible. Do this before anything remote, every time.
 
 Each result is `{"id","name","title","nutrients":{...},"serving":{"size",
 "unit"},"url","source"}`, plus `basis` and `basis_note` when the record carries
-them. `nutrients` always carries `kcal`, `protein`, `fat` and `carbs`, missing
-ones as 0. Every other nutrient — today `fiber`, `sodium`, `sugar` — appears
-only when the record holds it, because a defaulted 0 would read as a product
-free of that nutrient rather than one that never stated it. Check for the key
-before reading it. `serving` may be `{}`, and `url` is absent when the record
-has none. This is a search-result shape, not a stored record.
+them. `nutrients` always carries `kcal`, `protein`, `fat` and `carbohydrates`,
+missing ones as 0. Every other nutrient — `dietary_fiber`, `sodium`, `sugar`,
+`saturated_fat` and the rest of the shared vocabulary — appears only when the
+record holds it, because a defaulted 0 would read as a product free of that
+nutrient rather than one that never stated it. Check for the key before
+reading it. Stored keys are the canonical names, which are the Google Health
+API's lowercased, so read `carbohydrates` and `dietary_fiber` and not `carbs`
+or `fiber`; what you *write* may use any spelling a label does. `serving` may
+be `{}`, and `url` is absent when the record has none. This is a search-result shape, not a stored record.
 
 ## Exact lookup
 
@@ -240,7 +243,29 @@ A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of any
 nutrient per 100 g, three macros totalling more than 105 g per 100 g, a
 nutrient name outside the vocabulary, or a `basis` that is neither `as_sold`
-nor `as_prepared`. The basis is the one of those also
+nor `as_prepared`.
+
+## The reconciliation warning
+
+A panel whose macros cannot account for its stated energy is **stored, with a
+warning** — `protein × 4 + fat × 9 + carbohydrates × 4`, plus `alcohol × 7`
+when the source states an ethanol figure, against the stated calories within
+15% under or 10% over. The warning names both figures and the gap, and arrives
+in `notes` beside the record:
+
+```json
+{"stored":true,"product":{...},"notes":["energy unreconciled: protein, fat and
+carbohydrates account for 460 kcal against the stated 708 kcal, a gap of -247
+kcal; check the panel read one column and not two"]}
+```
+
+**Report it; do not work around it, and do not edit macros to silence it.**
+Most panels that fail are not wrong — polyols and fibre are excluded from
+carbohydrate on an AU label, and 635 of the 11,885 bundled rows do not
+reconcile for reasons like that, which is why this warns rather than refuses.
+What it does catch is the one error nothing else here can: a per-serve column
+read against a per-100 g one, where every figure is plausible alone. For a
+drink, state the alcohol — `-n alcohol=12.1g` — and the gap closes honestly. The basis is the one of those also
 checked when a record is **read**: an unrecognised value would read as absent,
 and absent means as-sold. `basis_note` is free text and is not checked at all;
 a shard is never failed over a mistake you can see in `lookup`.

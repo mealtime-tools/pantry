@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+from nutrition.panel import read_pairs
+
 from pantry.ids import normalize_id
 from pantry.nutrition import (
     NUTRIENTS,
     nutrients_for_storage,
     parse_amount,
-    panel_from_rows,
 )
 from pantry.products import Product
 
@@ -74,7 +75,7 @@ def _read_coles(payload: Any) -> dict[str, Any]:
     return {
         "name": str(product.get("name") or ""),
         "brand": str(product.get("brand") or ""),
-        "panel": panel_from_rows(rows),
+        "panel": read_pairs(rows),
         "serving": nutrition.get("servingSize"),
         "total": product.get("size"),
     }
@@ -104,7 +105,7 @@ def _read_woolworths(payload: Any) -> dict[str, Any]:
     return {
         "name": str(product.get("Name") or ""),
         "brand": str(product.get("Brand") or ""),
-        "panel": panel_from_rows(rows),
+        "panel": read_pairs(rows),
         "serving": information[0].get("ServingSize") if information else None,
         "total": product.get("PackageSize"),
     }
@@ -211,8 +212,6 @@ def build_record(
 ) -> Product:
     """Assemble a record, omitting every field the label did not supply."""
     optional = {
-        # Present only when the label printed kilojoules; never derived back.
-        "kj": panel.get("kj"),
         **{key: panel.get(key) for key in NUTRIENTS},
         # Absent unless a caller declares one: an unmarked record is as-sold.
         "basis": basis,
@@ -230,7 +229,7 @@ def build_record(
         "name": name,
         "brand": brand,
         "fat": panel["fat"],
-        "carbs": panel["carbs"],
+        "carbohydrates": panel["carbohydrates"],
         "protein": panel["protein"],
         # One decimal is what the database is written with. Rounded half-up
         # rather than by `round`, whose banker's rounding would disagree with

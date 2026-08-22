@@ -24,15 +24,19 @@ LICENCE_URL = (
     "afcd/datauserlicenceagreement"
 )
 
+# Workbook column headers, keyed by the name each becomes in the emitted
+# record. Those are the shared vocabulary's canonical names, because pantry
+# refuses a key it does not recognise and this file is what regenerates the
+# shard.
 FIELDS = {
     "key": "Public Food Key",
     "name": "Food Name",
     "kj": "Energy with dietary fibre, equated (kJ)",
     "protein": "Protein (g)",
     "fat": "Fat, total (g)",
-    "fiber": "Total dietary fibre (g)",
+    "dietary_fiber": "Total dietary fibre (g)",
     "sugar": "Total sugars (g)",
-    "carbs": "Available carbohydrate, without sugar alcohols (g)",
+    "carbohydrates": "Available carbohydrate, without sugar alcohols (g)",
 }
 
 NOTICE = f"""# Australian Food Composition Database notice
@@ -200,9 +204,9 @@ def nutrient_products(path: Path) -> dict[str, dict[str, Any]]:
                 "brand": "",
                 "kj": values["kj"],
                 "fat": values["fat"],
-                "carbs": values["carbs"],
+                "carbohydrates": values["carbohydrates"],
                 "protein": values["protein"],
-                "fiber": values["fiber"],
+                "dietary_fiber": values["dietary_fiber"],
                 "sugar": values["sugar"],
                 "kcal": kcal_from_kj(values["kj"]),
             }

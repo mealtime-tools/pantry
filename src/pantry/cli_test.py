@@ -19,7 +19,7 @@ def test_json_emits_exactly_one_object_with_the_documented_exit_codes(
         "kcal": 239.0,
         "protein": 9.5,
         "fat": 3.4,
-        "carbs": 39.2,
+        "carbohydrates": 39.2,
     }
     deps = make_deps([held])
 
@@ -55,7 +55,7 @@ def test_json_emits_exactly_one_object_with_the_documented_exit_codes(
         deps, "add", "--manual", "--id", "x", "--name", "X", stdin="nonsense"
     )
     assert nonsense.exit_code == 1
-    assert "no usable energy" in nonsense.stderr
+    assert "a piped panel is JSON" in nonsense.stderr
     assert nonsense.stdout == ""
 
     # And the flag works on either side of the subcommand.
@@ -114,26 +114,26 @@ def test_a_stated_panel_needs_no_paste_and_no_guessing(make_deps, run) -> None:
         "--name",
         "Stock Cubes",
         "-n",
-        "energy=23kJ",
+        "energy:23kJ",
         "-n",
-        "protein=0.05g",
+        "protein:0.05g",
         "-n",
-        "fat=0.35g",
+        "fat:0.35g",
         "-n",
-        "carbs=0.53g",
+        "carbohydrates:0.53g",
         "-n",
-        "sodium=1775mg",
+        "sodium:1775mg",
     )
     product = json.loads(scope.output)["data"]["product"]
 
-    assert product["kj"] == 23.0
+    assert product["kcal"] == pytest.approx(5.5, abs=0.1)
     assert product["sodium"] == 1.775
     assert product["protein"] == 0.05
 
 
 @pytest.mark.parametrize(
     "stated",
-    ["sodium", "sodium=", "=1775mg"],
+    ["sodium", "sodium:", ":1775mg"],
     ids=["no-separator", "no-value", "no-name"],
 )
 def test_a_malformed_nutrient_pair_is_refused(make_deps, run, stated) -> None:
@@ -150,7 +150,7 @@ def test_a_malformed_nutrient_pair_is_refused(make_deps, run, stated) -> None:
     )
     assert deps is not None
     assert scope.exit_code == 1
-    assert "NAME=VALUE" in scope.output
+    assert "NAME:VALUE" in scope.output
 
 
 def test_a_stated_figure_still_needs_its_unit(make_deps, run) -> None:
@@ -164,7 +164,7 @@ def test_a_stated_figure_still_needs_its_unit(make_deps, run) -> None:
         "--name",
         "X",
         "-n",
-        "sodium=1775",
+        "sodium:1775",
     )
 
     assert scope.exit_code == 1

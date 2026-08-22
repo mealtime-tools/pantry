@@ -70,8 +70,8 @@ def _nutrients(values: Any) -> dict[str, float]:
         "kcal": _number(source.get("energy-kcal_100g")),
         "protein": _number(source.get("proteins_100g")),
         "fat": _number(source.get("fat_100g")),
-        "carbs": _number(source.get("carbohydrates_100g")),
-        "fiber": _number(source.get("fiber_100g")),
+        "carbohydrates": _number(source.get("carbohydrates_100g")),
+        "dietary_fiber": _number(source.get("fiber_100g")),
         "sugar": _number(source.get("sugars_100g")),
         # The index publishes grams per 100 g, which is what a record holds.
         "sodium": _number(source.get("sodium_100g")),

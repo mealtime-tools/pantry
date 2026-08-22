@@ -102,12 +102,23 @@ wheels = [
 ]
 
 [[package]]
+name = "mealtime-nutrition"
+version = "0.1.0"
+source = { editable = "../nutrition" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0" }]
+
+[[package]]
 name = "mealtime-pantry"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "click-agentcli" },
+    { name = "mealtime-nutrition" },
     { name = "python-dotenv" },
     { name = "rapidfuzz" },
 ]
@@ -127,6 +138,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "click-agentcli", specifier = ">=0.1.0" },
+    { name = "mealtime-nutrition", editable = "../nutrition" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "rapidfuzz", specifier = ">=3.9" },

@@ -32,8 +32,8 @@ KJ_ID = 1062
 NUTRIENT_IDS = {
     1003: "protein",
     1004: "fat",
-    1005: "carbs",
-    1079: "fiber",
+    1005: "carbohydrates",
+    1079: "dietary_fiber",
     2000: "sugar",
     1093: "sodium",
 }

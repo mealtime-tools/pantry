@@ -85,23 +85,28 @@ one-line diff:
 
 ```
 source id name brand url serving_size serving_unit total_size total_unit
-kcal kj protein fat carbs
+kcal kj protein fat carbohydrates
 <vocabulary nutrients, sorted alphabetically>
 basis basis_note
 ```
 
 The three groups earn their treatment differently. The structural fields are
-enumerated because each is validated in its own way. Energy and the four
+enumerated because each is validated in its own way. Energy and the three
 macros are enumerated because they are cross-checked against each other and
 against the 100 g the panel describes. Every other nutrient is open, governed
-by a vocabulary of accepted names — today `fiber`, `sodium` and `sugar` — and
-written in sorted order, so adding one is a single entry in that vocabulary
-and diffs no other line.
+by the vocabulary in [`mealtime-nutrition`][nutrition] and written in sorted
+order, so adding one is a change in that library and diffs no line here.
 
-The vocabulary is an allowlist. A name outside it is refused rather than
-stored, because `sodum: 0.4` would store cleanly and then no consumer would
-ever find the sodium. `salt` is deliberately not a synonym for `sodium`: salt
-is 2.5 times its sodium.
+The vocabulary is an allowlist, and its canonical names are the Google Health
+API's, lowercased: `carbohydrates` where a CLI would say `carbs`,
+`dietary_fiber` where a label says `Dietary Fibre`. Every spelling a label, an
+API or a person writes instead is an alias, so nothing a user types has to
+change. A name outside the vocabulary is refused rather than stored, because
+`sodum: 0.4` would store cleanly and then no consumer would ever find the
+sodium. `salt` is deliberately not a synonym for `sodium`: salt is 2.5 times
+its sodium.
+
+[nutrition]: https://github.com/mealtime-tools/nutrition
 
 Optional missing keys are omitted. Every shard omits `source` because the
 filename supplies it, in the shipped data and the user's store alike. Records
@@ -120,10 +125,24 @@ formatter is part of the record format, not presentation.
 ### Frozen data
 
 `data/coles.jsonl` is an irreplaceable 10,297-row scrape with sha256
-`eb55fa163c815301f8673e06e282c449deea9d12bde7e0f67e2b6930d187c12d`.
+`daaff67f11b73b64240e881df6fcc51802d93f69a7435358b8cd17e9f354af4d`.
 `data/afcd.jsonl` has 1,588 rows and sha256
-`c59184d79adcabe49762e34514144f468ba1e0cdd5770da167f584e6f63a6455`.
+`cb43ef1526ca490cf9a2deea9026c860442f1dab8e7a19ef05fd90786c637612`.
 Tests pin the counts, checksums, and byte-for-byte re-serialization.
+
+Both were rewritten once, when the vocabulary moved to the shared library and
+`carbs` became `carbohydrates` and `fiber` became `dietary_fiber`. Nothing
+else changed: the new bytes are the old bytes with those two key names
+substituted, which is how the rewrite was proven rather than argued.
+
+635 of the 11,885 rows cannot account for their own stated energy. Measuring
+that is what decided the check: refusing on it would turn away one real
+retailer product in nineteen, because most failures are legitimate — polyols
+and fibre are excluded from carbohydrate on an AU label. So `add` warns instead
+and stores the record, naming both figures and the gap. The one thing it really
+catches is a per-serve column read against a per-100 g one, which nothing else
+here can see. eatout refuses on the same shared check, because its data is
+curated per serving; the arithmetic is shared and the verdict is not.
 
 One Coles row contains `0.00001`: Python normally writes `1e-05`, which is why
 a parse-and-dump migration would corrupt the frozen bytes while appearing

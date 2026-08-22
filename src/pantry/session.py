@@ -12,6 +12,8 @@ from pathlib import Path
 
 import click
 from agentcli import emit_error
+from nutrition.units import UnknownUnitError
+from nutrition.vocabulary import UnknownNutrientError
 
 from pantry.nutrition import NutritionError
 from pantry.open_food_facts import RemoteFailure
@@ -23,12 +25,20 @@ from pantry.store import Store
 
 # A refusal the user caused or must resolve by hand exits 1; a refusal by
 # something remote exits 2. Nothing here is ever retried.
+#
+# The shared library's two refusals are listed beside pantry's own because they
+# are the same kind of answer: a name it does not know and a figure with no unit
+# are both things a user must correct by hand. Restating them as a
+# `NutritionError` on the way through would mean two messages for one rule.
+# `EnergyError` is deliberately absent: pantry catches it and warns.
 _EXIT_CODES: tuple[tuple[type[Exception], int], ...] = (
     (Blocked, 2),
     (RemoteFailure, 2),
     (BudgetExhausted, 1),
     (ProductError, 1),
     (NutritionError, 1),
+    (UnknownNutrientError, 1),
+    (UnknownUnitError, 1),
     (SiteError, 1),
     (OSError, 1),
 )

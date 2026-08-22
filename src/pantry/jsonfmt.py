@@ -4,7 +4,7 @@
 has to reproduce the serializer that made it. Python's `json` module differs
 from `JSON.stringify` in one measurable place: `repr(0.00001)` is `1e-05` while
 ECMAScript renders `0.00001`. Real row 8520 of `coles.jsonl` carries
-`"fiber":0.00001`, so using `json.dumps` there would rewrite the file.
+`"dietary_fiber":0.00001`, so using `json.dumps` there would rewrite the file.
 """
 
 import json

@@ -1,6 +1,7 @@
 """Rule 9: where user data may land, and that base data is never written."""
 
 import hashlib
+import json
 from pathlib import Path
 
 
@@ -8,26 +9,28 @@ from pantry.data import data_dir
 from pantry.open_food_facts import cache_dir
 from pantry.store import Store, store_dir
 
+# 1 g each of protein, fat and carbohydrate is 17 kcal, so these rows account
+# for their own energy: `Store.add` reconciles a record before writing it.
 BASE = [
     {
         "source": "coles",
         "id": "1",
         "name": "One",
         "brand": "",
-        "kcal": 100.0,
+        "kcal": 17.0,
         "protein": 1.0,
         "fat": 1.0,
-        "carbs": 1.0,
+        "carbohydrates": 1.0,
     },
     {
         "source": "coles",
         "id": "2",
         "name": "Two",
         "brand": "",
-        "kcal": 100.0,
+        "kcal": 17.0,
         "protein": 1.0,
         "fat": 1.0,
-        "carbs": 1.0,
+        "carbohydrates": 1.0,
     },
 ]
 
@@ -44,10 +47,10 @@ def test_a_record_lands_in_the_shard_named_for_its_source(
             "id": "loaf",
             "name": "Loaf",
             "brand": "",
-            "kcal": 100.0,
+            "kcal": 17.0,
             "protein": 1.0,
             "fat": 1.0,
-            "carbs": 1.0,
+            "carbohydrates": 1.0,
         }
     )
 
@@ -104,7 +107,9 @@ def test_user_data_stays_out_of_every_checkout(
         else None
     )
 
-    panel = "Energy 1000kJ\nProtein 9.5g\nFat 3.4g\nCarbohydrate 39.2g"
+    panel = json.dumps(
+        {"kcal": 239.01, "protein": 9.5, "fat": 3.4, "carbohydrates": 39.2}
+    )
     deps = make_deps(list(BASE))
     added = run(
         deps, "add", "--manual", "--id", "loaf", "--name", "Loaf", stdin=panel
