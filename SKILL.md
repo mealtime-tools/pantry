@@ -171,7 +171,9 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   header names "per 100 g" first.
 - A row printed in milligrams is converted to the grams a record holds, so
   `Sodium 400mg` and `Sodium 0.4g` both store `0.4`, and a trace bound stores
-  the bound. A `Salt` row is not read at all — salt is 2.5 times its sodium. A
+  the bound. Any nutrient beyond the four macros **must** state its unit: the
+  macros are only ever printed in grams, but `Sodium 355` is a guess between
+  two answers 1000 times apart, so it is refused rather than guessed. A `Salt` row is not read at all — salt is 2.5 times its sodium. A
   `Sodium` row must open its line and be followed by its figure, which is what
   keeps `Sodium Bicarbonate (500)` in an ingredient list from becoming a
   figure for anything. A row that does not match is absent from the record

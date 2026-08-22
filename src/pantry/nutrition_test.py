@@ -107,7 +107,6 @@ Ingredients: Dried Apricots (99%), Sodium Bicarbonate (500)
         # No unit at all is grams, exactly as an unmarked protein row is. A
         # sodium-shaped milligram figure would be 355 g per 100 g and the
         # ceiling refuses it, which is the recoverable failure.
-        ("Sodium 355", 355),
         ("Sodium: 355 mg", 0.355),
         # A trace amount is a bound, and the bound is the only figure the
         # label carries -- which is what every other row already does with
@@ -119,7 +118,6 @@ Ingredients: Dried Apricots (99%), Sodium Bicarbonate (500)
         "two-column",
         "milligrams",
         "grams",
-        "no-unit",
         "colon",
         "less-than",
         "bound",
@@ -261,3 +259,22 @@ def test_an_impossible_sodium_is_refused_on_the_zero_calorie_path(
 )
 def test_an_amount_needs_both_a_number_and_a_unit(written, expected) -> None:
     assert parse_amount(written) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["Sodium 355", "Dietary Fibre 4.1", "Sugars 2.2"],
+    ids=["sodium", "fiber", "sugar"],
+)
+def test_a_nutrient_figure_without_a_unit_is_refused(line: str) -> None:
+    """1000x apart, so a bare figure is a guess between two answers.
+
+    A macro is only printed in grams, so it needs no unit; every nutrient
+    that can be printed in milligrams does.
+    """
+    with pytest.raises(NutritionError, match="with no unit"):
+        parse_panel(line)
+
+
+def test_a_macro_needs_no_unit() -> None:
+    assert parse_panel("Protein 8.5\nFat 3.6") == {"protein": 8.5, "fat": 3.6}
