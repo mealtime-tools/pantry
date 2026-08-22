@@ -169,6 +169,10 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   optional. Given a retailer url it keeps that identity. Two-column labels are
   handled: the per-100 g column wins, which is the last column unless the
   header names "per 100 g" first.
+- `-n NAME=VALUE`, repeatable, states a row outright instead of pasting a
+  panel: `-n energy=23kJ -n sodium=1775mg`. Nothing is inferred from layout —
+  no column to pick, no row to find in a line — so prefer it when the figures
+  are already known. Absent rows stay absent, as always.
 - A row printed in milligrams is converted to the grams a record holds, so
   `Sodium 400mg` and `Sodium 0.4g` both store `0.4`, and a trace bound stores
   the bound. Any nutrient beyond the four macros **must** state its unit: the
