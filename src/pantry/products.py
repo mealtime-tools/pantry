@@ -25,6 +25,14 @@ PRODUCT_SOURCES = (
     "manual",
 )
 
+# What a record's nutrients are measured against. Absent is the default and
+# means as-sold: the frozen shards predate the key, and writing a default into
+# them would rewrite a file nothing can regenerate.
+PRODUCT_BASES = (
+    "as_sold",
+    "as_prepared",
+)
+
 # The order keys are written in. The scrape emitted several key orders and no
 # particular record order, which turned an edit to one product into a diff
 # across the whole file. Pinning both is the entire point of storing JSONL.
@@ -40,6 +48,11 @@ PRODUCT_KEYS = (
     "fiber",
     "sugar",
     "kcal",
+    # The basis sits with the figures it qualifies rather than with the
+    # packaging fields, so a line read by eye carries the caveat beside the
+    # numbers it applies to.
+    "basis",
+    "basis_note",
     "url",
     "serving_size",
     "serving_unit",
@@ -93,6 +106,40 @@ def _check_number(product: Product, key: str, optional: bool) -> None:
         raise ProductError(f"{_label(product)} has invalid {key}: {value}")
 
 
+def _check_basis_value(product: Product) -> None:
+    """Refuse a basis this format does not define.
+
+    Coerced or ignored, an unknown value reads as "no caveat" — which is
+    exactly the silent scaling error the key exists to make visible. This is
+    the one rule strict enough to enforce when a record is merely read.
+    """
+    basis = product.get("basis")
+    if basis is not None and basis not in PRODUCT_BASES:
+        raise ProductError(
+            f"{_label(product)} has unsupported basis: {basis!r}"
+        )
+
+
+def _check_basis(product: Product) -> None:
+    """Refuse a basis, or a note, this format does not define."""
+    _check_basis_value(product)
+
+    note = product.get("basis_note")
+    if note is None:
+        return
+
+    if not isinstance(note, str) or not note.strip():
+        raise ProductError(
+            f"{_label(product)} has an unusable basis_note: {note!r}"
+        )
+
+    # A note without a flag is the worst of both: the record structurally
+    # claims as-sold while its own text says otherwise, so a consumer keyed on
+    # `basis` scales by a dry weight with the conversion sitting beside it.
+    if product.get("basis") is None:
+        raise ProductError(f"{_label(product)} has a basis_note but no basis")
+
+
 def _label(product: Product) -> str:
     return f"{product.get('source')}:{product.get('id')}"
 
@@ -100,7 +147,7 @@ def _label(product: Product) -> str:
 def assert_product_record(product: Product) -> None:
     """Structural checks only, safe for the frozen historical Coles rows.
 
-    237 of those rows fail today's stricter nutrition rules and none of them
+    141 of those rows fail today's stricter nutrition rules and none of them
     can be re-scraped, so the shard is validated for shape and not for
     plausibility.
     """
@@ -110,6 +157,8 @@ def assert_product_record(product: Product) -> None:
         _check_number(product, key, optional=False)
     for key in _OPTIONAL_NUMBERS:
         _check_number(product, key, optional=True)
+
+    _check_basis(product)
 
 
 def assert_exportable_product(product: Product) -> None:
@@ -194,6 +243,17 @@ def parse_jsonl(
                 # order, which is what the shard on disk is written in.
                 parsed = {"source": source, **parsed}
             assert_identity(parsed)
+
+            # The value, and nothing else about the basis. An unrecognised
+            # one reads as "absent", and absent means as-sold, so the record
+            # would silently lose the warning it was written to carry. The
+            # note rules stay on the write path deliberately: an empty note,
+            # or one with no basis, is already visible in `lookup` and
+            # `search` output, and refusing a whole shard over a mistake a
+            # reader can see would take every other row down with it — this
+            # command included, since finding one record means reading them
+            # all.
+            _check_basis_value(parsed)
         except (ValueError, AttributeError) as cause:
             raise ProductError(
                 f"{label}: line {number} is invalid: {cause}"

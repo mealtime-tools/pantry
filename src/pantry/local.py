@@ -60,6 +60,15 @@ def as_result(product: Product) -> dict:
         },
         "serving": serving,
     }
+    # Beside the nutrients, for the same reason they are stored together: a
+    # prepared-basis result that looks identical to an as-sold one is the bug.
+    # Empty rather than absent, because a record read off a hand-edited shard
+    # may carry a note that says nothing, and this shape is documented as
+    # carrying these keys only when the record really does.
+    for key in ("basis", "basis_note"):
+        if product.get(key):
+            result[key] = product[key]
+
     if product.get("url") is not None:
         result["url"] = product["url"]
     result["source"] = product.get("source")

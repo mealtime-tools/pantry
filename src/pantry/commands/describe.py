@@ -5,6 +5,23 @@ from typing import Any
 _MACROS = (("kcal", "kcal"), ("protein", "p"), ("carbs", "c"), ("fat", "f"))
 
 
+def _caveat(product: dict[str, Any]) -> str:
+    """What the figures are measured against, when the record says.
+
+    Appended rather than columnised: it is free text of any length, and a
+    record on a prepared basis must not read like an as-sold one. Emptiness
+    rather than absence is the test: the note rules live on the write path, so
+    a record that was only ever read may carry a note that says nothing, and a
+    dangling `[as_prepared: ]` is not worth printing.
+    """
+    parts = [
+        str(product[key])
+        for key in ("basis", "basis_note")
+        if product.get(key)
+    ]
+    return f"  [{': '.join(parts)}]" if parts else ""
+
+
 def describe(product: dict[str, Any]) -> str:
     """One dense line per product, wide enough to identify it."""
     nutrients = product.get("nutrients") or product
@@ -19,4 +36,4 @@ def describe(product: dict[str, Any]) -> str:
         name = product.get("name", "")
         title = f"{name} ({brand})" if brand else name
 
-    return f"{identity:<20} {macros:<28} {title}"
+    return f"{identity:<20} {macros:<28} {title}{_caveat(product)}"

@@ -216,6 +216,8 @@ def build_record(
     url: str | None = None,
     serving: tuple[float | None, str | None] = (None, None),
     total: tuple[float | None, str | None] = (None, None),
+    basis: str | None = None,
+    basis_note: str | None = None,
 ) -> Product:
     """Assemble a record, omitting every field the label did not supply."""
     optional = {
@@ -223,6 +225,9 @@ def build_record(
         "kj": panel.get("kj"),
         "fiber": panel.get("fiber"),
         "sugar": panel.get("sugar"),
+        # Absent unless a caller declares one: an unmarked record is as-sold.
+        "basis": basis,
+        "basis_note": basis_note,
         "url": url,
         "serving_size": serving[0],
         "serving_unit": serving[1],
