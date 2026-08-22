@@ -15,6 +15,7 @@ from collections import defaultdict
 from rapidfuzz import fuzz, process
 
 from pantry.ids import id_sort_key
+from pantry.nutrition import NUTRIENTS
 from pantry.products import PRODUCT_SOURCES, Product
 
 # Below this, a word pair is a coincidence rather than a spelling variant.
@@ -50,16 +51,17 @@ def as_result(product: Product) -> dict:
         if product.get(full) is not None
     }
 
+    # Energy and the macros are on every record, so a default only stands in
+    # for a shard row read without validation. Every other nutrient is carried
+    # only when the record holds it: a defaulted 0 would read as a product free
+    # of that nutrient rather than one that never stated it.
     nutrients = {
         key: product.get(key) or 0
-        for key in ("kcal", "protein", "fat", "carbs", "fiber", "sugar")
+        for key in ("kcal", "protein", "fat", "carbs")
     }
-
-    # Sodium is milligrams, and it is the one nutrient most records predate: a
-    # defaulted 0 would read as a sodium-free product rather than an unknown
-    # one, so it is carried only when the record holds it.
-    if product.get("sodium") is not None:
-        nutrients["sodium"] = product["sodium"]
+    nutrients.update(
+        {k: product[k] for k in NUTRIENTS if product.get(k) is not None}
+    )
 
     result = {
         "id": product.get("id"),

@@ -6,9 +6,9 @@ description: Search local food product records or Open Food Facts by product tex
 # Pantry
 
 Use the installed `pantry` CLI for food-product data. Every nutrient in every
-record is **per 100 g**; scale by `grams / 100` at the point of display. Every
-figure is grams except `sodium`, which is **milligrams** per 100 g — the unit
-its label row prints. An absent `sodium` is unknown, never zero.
+record is **grams per 100 g** — one rule, no exceptions; scale by
+`grams / 100` at the point of display. An absent nutrient is unknown, never
+zero.
 
 Per 100 g **as sold**, unless the record carries `basis`. `basis` is `as_sold`
 or `as_prepared`, and absent — almost every record — means `as_sold`. An
@@ -82,13 +82,14 @@ NAME` restricts to one provider and repeats; `--limit` applies per provider;
 `sources` names the providers that answered, so a silently skipped one is
 visible. Do this before anything remote, every time.
 
-Each result is `{"id","name","title","nutrients":{kcal,protein,fat,carbs,fiber,
-sugar},"serving":{"size","unit"},"url","source"}`, plus `basis`, `basis_note`
-and `sodium` when the record carries them. `nutrients` always carries those six
-keys, missing ones as 0; `sodium` is the exception, absent unless the record
-holds it, because a defaulted 0 would read as a sodium-free product. `serving`
-may be `{}`, and `url` is absent when the record has none. This is a
-search-result shape, not a stored record.
+Each result is `{"id","name","title","nutrients":{...},"serving":{"size",
+"unit"},"url","source"}`, plus `basis` and `basis_note` when the record carries
+them. `nutrients` always carries `kcal`, `protein`, `fat` and `carbs`, missing
+ones as 0. Every other nutrient — today `fiber`, `sodium`, `sugar` — appears
+only when the record holds it, because a defaulted 0 would read as a product
+free of that nutrient rather than one that never stated it. Check for the key
+before reading it. `serving` may be `{}`, and `url` is absent when the record
+has none. This is a search-result shape, not a stored record.
 
 ## Exact lookup
 
@@ -168,12 +169,13 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   optional. Given a retailer url it keeps that identity. Two-column labels are
   handled: the per-100 g column wins, which is the last column unless the
   header names "per 100 g" first.
-- A `Sodium` row is read in milligrams: `Sodium 0.4g` stores 400, and a trace
-  bound stores the bound. A `Salt` row is not read at all — salt is 2.5 times
-  its sodium. The row must open its line and be followed by its figure, which
-  is what keeps `Sodium Bicarbonate (500)` in an ingredient list from becoming
-  a sodium figure. A row that does not match is absent from the record rather
-  than guessed at, and nothing warns about it.
+- A row printed in milligrams is converted to the grams a record holds, so
+  `Sodium 400mg` and `Sodium 0.4g` both store `0.4`, and a trace bound stores
+  the bound. A `Salt` row is not read at all — salt is 2.5 times its sodium. A
+  `Sodium` row must open its line and be followed by its figure, which is what
+  keeps `Sodium Bicarbonate (500)` in an ingredient list from becoming a
+  figure for anything. A row that does not match is absent from the record
+  rather than guessed at, and nothing warns about it.
 - `--basis as_prepared` with `--basis-note "per 100 mL prepared; 1 cube
   (10.5 g) makes 500 mL"` records that the panel is not on an as-sold basis.
   `--basis-note` needs `--basis`, and both need `--manual`: no retailer page or
@@ -223,15 +225,16 @@ to 0. An inferred zero silently under-counts every recipe downstream. Do not
 work around a refusal by supplying zeros.
 
 The one exception is `--zero-calorie`, which accepts only an absent or all-zero
-panel and is refused the moment any value is non-zero. Sodium is exempt from
-that check alone: it carries no energy, so table salt is a genuine 0 kcal
-record with 38,758 mg of it.
+panel and is refused the moment an energy-bearing value is non-zero. A
+calorie-free nutrient is exempt: sodium carries no energy, so table salt is a
+genuine 0 kcal record with 38.758 g of it. `sugar` is not exempt — a zero
+energy printed beside a sugar figure is a half-parsed panel.
 
 A record is also refused for: no usable energy, more energy than pure fat
-(900 kcal/100 g), a negative or non-finite figure, more than 100 g of anything
-per 100 g (100,000 mg for sodium, in its own unit), three macros totalling
-more than 105 g per 100 g, or a `basis` that is neither `as_sold` nor
-`as_prepared`. The basis is the one of those also
+(900 kcal/100 g), a negative or non-finite figure, more than 100 g of any
+nutrient per 100 g, three macros totalling more than 105 g per 100 g, a
+nutrient name outside the vocabulary, or a `basis` that is neither `as_sold`
+nor `as_prepared`. The basis is the one of those also
 checked when a record is **read**: an unrecognised value would read as absent,
 and absent means as-sold. `basis_note` is free text and is not checked at all;
 a shard is never failed over a mistake you can see in `lookup`.

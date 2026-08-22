@@ -50,10 +50,9 @@ environment enables the USDA source; without one it is skipped silently.
 
 ### Record contract
 
-Nutrients are per 100 g. Consumers scale by `grams / 100`; Pantry never stores
-a pre-scaled nutrient. Every figure is grams except `sodium`, which is
-milligrams per 100 g — the unit its label row prints, so the common case needs
-no conversion. An absent `sodium` is unknown, never zero. Identity is
+Nutrients are grams per 100 g — one rule, no exceptions. Consumers scale by
+`grams / 100`; Pantry never stores a pre-scaled nutrient or a second unit. An
+absent nutrient is unknown, never zero. Identity is
 `(source, id)`, with source-native string ids normalised at ingress. Pantry
 supports `coles`, `woolworths`, `afcd`, `usda`, `manual`, and
 `openfoodfacts`.
@@ -85,15 +84,28 @@ JSONL keys have this fixed order, because a one-product edit must remain a
 one-line diff:
 
 ```
-source id name brand kj fat carbs protein fiber sugar sodium kcal basis
-basis_note
-url serving_size serving_unit total_size total_unit
+source id name brand url serving_size serving_unit total_size total_unit
+kcal kj protein fat carbs
+<vocabulary nutrients, sorted alphabetically>
+basis basis_note
 ```
 
-Optional missing keys are omitted. Unknown keys are preserved after known
-ones. Every shard omits `source` because the filename supplies it, in the
-shipped data and the user's store alike. Records sort by source order, then
-id.
+The three groups earn their treatment differently. The structural fields are
+enumerated because each is validated in its own way. Energy and the four
+macros are enumerated because they are cross-checked against each other and
+against the 100 g the panel describes. Every other nutrient is open, governed
+by a vocabulary of accepted names — today `fiber`, `sodium` and `sugar` — and
+written in sorted order, so adding one is a single entry in that vocabulary
+and diffs no other line.
+
+The vocabulary is an allowlist. A name outside it is refused rather than
+stored, because `sodum: 0.4` would store cleanly and then no consumer would
+ever find the sodium. `salt` is deliberately not a synonym for `sodium`: salt
+is 2.5 times its sodium.
+
+Optional missing keys are omitted. Every shard omits `source` because the
+filename supplies it, in the shipped data and the user's store alike. Records
+sort by source order, then id.
 
 Id ordering is a key, never a comparator: digit ids use `(0, len, value)` and
 other ids use `(1, 0, value)`. Digits sort first, length before codepoint, and
@@ -108,14 +120,15 @@ formatter is part of the record format, not presentation.
 ### Frozen data
 
 `data/coles.jsonl` is an irreplaceable 10,297-row scrape with sha256
-`9d8eaa3b32f9775006e36710cfcf323a011c8a6b0aa48736db67d10d0bc8d7f6`.
+`eb55fa163c815301f8673e06e282c449deea9d12bde7e0f67e2b6930d187c12d`.
 `data/afcd.jsonl` has 1,588 rows and sha256
-`53938eec2e627db56666df8abca04f6bc1dca844fb8decbfea32cfaa762d775a`.
+`c59184d79adcabe49762e34514144f468ba1e0cdd5770da167f584e6f63a6455`.
 Tests pin the counts, checksums, and byte-for-byte re-serialization.
 
 One Coles row contains `0.00001`: Python normally writes `1e-05`, which is why
 a parse-and-dump migration would corrupt the frozen bytes while appearing
-semantically equal. No command rewrites these shards. A fetched product already
+semantically equal. No command rewrites these shards; the key order above was
+applied once, by hand, with every parsed value proven unchanged row by row. A fetched product already
 held is never fetched again; malformed nutrition is refused; missing values are
 never inferred as zero; `--zero-calorie` conflicts with any non-zero nutrient.
 Search may display a numeric convenience shape, but those values are never

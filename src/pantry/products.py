@@ -1,12 +1,13 @@
 """The record format: what a product is, and how it is read and written.
 
-Nutrients are per 100 g, everywhere, always. A consumer scales by
-`grams / 100` at the point of display; storing a pre-scaled value would make
-editing an amount wrong in a way no test would catch.
+Every nutrient is grams per 100 g. One rule, no exceptions: a consumer scales
+by `grams / 100` at the point of display, and storing a pre-scaled value or a
+second unit would make editing an amount wrong in a way no test would catch.
 
-Every nutrient is grams except `sodium`, which is milligrams: it is the unit
-every nutrition panel prints that row in, so the common case needs no
-conversion at all.
+Structural fields are enumerated because each is validated in its own way.
+Energy and the four macros are enumerated because they are cross-checked
+against each other. Every other nutrient is open, governed by the vocabulary
+in `pantry.nutrition`.
 """
 
 import json
@@ -15,7 +16,11 @@ from typing import Any
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
-from pantry.nutrition import MG_PER_G, assert_usable_nutrients
+from pantry.nutrition import (
+    CALORIE_FREE,
+    NUTRIENTS,
+    assert_usable_nutrients,
+)
 
 # The data owners. `localstore` is deliberately absent: it is a storage
 # layer, and
@@ -37,29 +42,15 @@ PRODUCT_BASES = (
     "as_prepared",
 )
 
-# The order keys are written in. The scrape emitted several key orders and no
-# particular record order, which turned an edit to one product into a diff
-# across the whole file. Pinning both is the entire point of storing JSONL.
+# What identifies and packages a product, in the order these are written. The
+# scrape emitted several key orders and no particular record order, which
+# turned an edit to one product into a diff across the whole file. Pinning
+# both is the entire point of storing JSONL.
 PRODUCT_KEYS = (
     "source",
     "id",
     "name",
     "brand",
-    "kj",
-    "fat",
-    "carbs",
-    "protein",
-    "fiber",
-    "sugar",
-    # Milligrams, not grams. The only key whose unit differs from its
-    # neighbours, because the label it is read off is written that way.
-    "sodium",
-    "kcal",
-    # The basis sits with the figures it qualifies rather than with the
-    # packaging fields, so a line read by eye carries the caveat beside the
-    # numbers it applies to.
-    "basis",
-    "basis_note",
     "url",
     "serving_size",
     "serving_unit",
@@ -67,15 +58,34 @@ PRODUCT_KEYS = (
     "total_unit",
 )
 
+# Energy and the four macros, written next. Enumerated where the vocabulary
+# nutrients are not, because these are the figures cross-checked against each
+# other and against the 100 g the panel describes.
+CORE_NUTRIENTS = ("kcal", "kj", "protein", "fat", "carbs")
+
+# Written last, after the figures they qualify, so a line read by eye carries
+# the caveat beside the numbers it applies to.
+BASIS_KEYS = ("basis", "basis_note")
+
 Product = dict[str, Any]
 
 _REQUIRED_NUMBERS = ("kcal", "protein", "fat", "carbs")
-_OPTIONAL_NUMBERS = ("kj", "fiber", "sugar", "serving_size", "total_size")
 
-# 100 g of sodium per 100 g, in the milligrams sodium is stored in. The
-# nutrition rules cap every other figure at 100 g, and pure table salt is only
-# 38,758 mg, so nothing edible comes near this.
-_MAX_SODIUM_MG = 100 * MG_PER_G
+# Figures that may be absent and are not nutrients, so the vocabulary rules do
+# not apply: `kj` is stored only when a label printed it, and a pack size is a
+# mass rather than a share of one.
+_OPTIONAL_SIZES = ("kj", "serving_size", "total_size")
+
+# Grams per 100 g, so 100 is the ceiling for every nutrient alike. Pure table
+# salt is only 38.758 g of sodium, so nothing edible comes near it.
+_MAX_PER_100G = 100
+
+# Every key a record may hold. Closed rather than open: an unrecognised key is
+# a misspelling far more often than it is a new field, and `sodum` would store
+# cleanly and then no consumer would ever find the sodium again.
+_ALLOWED_KEYS = frozenset(
+    (*PRODUCT_KEYS, *CORE_NUTRIENTS, *NUTRIENTS, *BASIS_KEYS)
+)
 
 
 class ProductError(ValueError):
@@ -142,6 +152,25 @@ def _label(product: Product) -> str:
     return f"{product.get('source')}:{product.get('id')}"
 
 
+def _check_keys(product: Product) -> None:
+    """Refuse a key this format does not define, rather than storing it."""
+    unknown = sorted(set(product) - _ALLOWED_KEYS)
+    if unknown:
+        raise ProductError(
+            f"{_label(product)} has unrecognised keys: {', '.join(unknown)}"
+        )
+
+
+def record_keys(product: Product) -> tuple[str, ...]:
+    """The order this record's keys are written in.
+
+    Vocabulary nutrients sort alphabetically, which is what removes the need to
+    enumerate them: adding one changes no order and diffs no other line.
+    """
+    held = sorted(key for key in product if key in NUTRIENTS)
+    return (*PRODUCT_KEYS, *CORE_NUTRIENTS, *held, *BASIS_KEYS)
+
+
 def assert_product_record(product: Product) -> None:
     """Structural checks only, safe for the frozen historical Coles rows.
 
@@ -150,16 +179,18 @@ def assert_product_record(product: Product) -> None:
     plausibility.
     """
     assert_identity(product)
+    _check_keys(product)
 
     for key in _REQUIRED_NUMBERS:
         _check_number(product, key, optional=False)
-    for key in _OPTIONAL_NUMBERS:
+    for key in _OPTIONAL_SIZES:
         _check_number(product, key, optional=True)
 
-    # Checked here rather than with the panel rules because both zero-energy
-    # paths return before those run, and sodium is the only figure they carry
-    # through. Every path that authors one reaches this function.
-    _check_number(product, "sodium", optional=True, maximum=_MAX_SODIUM_MG)
+    # One rule for the whole vocabulary. Capped here rather than with the panel
+    # rules because both zero-energy paths return before those run, and every
+    # path that authors a record reaches this function.
+    for key in NUTRIENTS:
+        _check_number(product, key, optional=True, maximum=_MAX_PER_100G)
 
     _check_basis(product)
 
@@ -169,11 +200,12 @@ def assert_exportable_product(product: Product) -> None:
     assert_product_record(product)
 
     # A confirmed zero-calorie record is the one shape the nutrition rules
-    # cannot express, so it is checked for internal consistency instead.
-    # Sodium is absent from the list below on purpose: it carries no energy,
-    # so table salt is a genuine 0 kcal record with 38,758 mg of it.
+    # cannot express, so it is checked for internal consistency instead. A
+    # calorie-free nutrient is exempt: table salt is a genuine 0 kcal record
+    # with 38.758 g of sodium in it.
     if product.get("kcal") == 0:
-        for key in ("kj", "protein", "fat", "carbs", "fiber", "sugar"):
+        claimed = (*CORE_NUTRIENTS, *NUTRIENTS)
+        for key in (k for k in claimed if k not in CALORIE_FREE):
             value = product.get(key)
             if value is not None and value != 0:
                 raise ProductError(
@@ -193,20 +225,15 @@ def canonicalize(product: Product, source: str | None = None) -> Product:
             f"{_label(product)} cannot be written to the {source} shard"
         )
 
+    _check_keys(product)
+
     # A shard's filename supplies its source, so its rows need not repeat it.
     skip = {"source"} if source else set()
-    ordered = {
+    return {
         key: product[key]
-        for key in PRODUCT_KEYS
+        for key in record_keys(product)
         if key not in skip and product.get(key) is not None
     }
-
-    # Anything a new import starts emitting is kept rather than dropped.
-    for key, value in product.items():
-        if key not in ordered and key not in skip:
-            ordered[key] = value
-
-    return ordered
 
 
 def _sort_key(product: Product) -> tuple[int, tuple[int, int, str]]:

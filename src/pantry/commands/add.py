@@ -14,9 +14,9 @@ from pantry.ids import normalize_id
 from pantry.nutrition import nutrients_for_storage, parse_amount, parse_panel
 from pantry.products import (
     PRODUCT_BASES,
-    PRODUCT_KEYS,
     PRODUCT_SOURCES,
     Product,
+    record_keys,
 )
 from pantry.providers import (
     REF_FORMS,
@@ -84,7 +84,9 @@ def _preserved(held: Product | None, product: Product) -> Product:
 
 def _changed_fields(before: Product, after: Product) -> list[str]:
     """Stable, human-readable field changes for an explicit refresh."""
-    keys = [k for k in PRODUCT_KEYS if k not in ("source", "id")]
+    # Both records, so a field only one of them holds is still reported.
+    merged = {**before, **after}
+    keys = [k for k in record_keys(merged) if k not in ("source", "id")]
     return [
         f"{key}: {before.get(key)!r} -> {after.get(key)!r}"
         for key in keys

@@ -6,9 +6,9 @@ nothing here to be refused by and nothing to pace around. It is a plain
 request.
 
 `foodNutrients[].amount` is per 100 g for every data type, which is already
-Pantry's unit, so nothing is scaled on the way in. `labelNutrients` is per
-serving and is deliberately ignored — reading it would silently make every
-recipe wrong by the ratio of serving size to 100 g.
+Pantry's basis, so only the unit is converted on the way in. `labelNutrients`
+is per serving and is deliberately ignored — reading it would silently make
+every recipe wrong by the ratio of serving size to 100 g.
 """
 
 import json
@@ -29,8 +29,6 @@ TIMEOUT_S = 30
 # of records that carry only the SI figure.
 KCAL_ID = 1008
 KJ_ID = 1062
-# Sodium is published in milligrams per 100 g, which is already the unit the
-# record stores it in, so it is carried like any other figure.
 NUTRIENT_IDS = {
     1003: "protein",
     1004: "fat",
@@ -40,7 +38,25 @@ NUTRIENT_IDS = {
     1093: "sodium",
 }
 
+# The ids this API publishes in milligrams; a record holds grams. Stated here
+# rather than read from the response's `unitName`, because a response that
+# omitted that field would silently store a figure a thousand times too large.
+MILLIGRAM_IDS = frozenset({1093})
+
+MG_PER_G = 1000
+
 KCAL_PER_KJ = 1 / 4.184
+
+
+def _grams(nutrient_id: int, amount: float) -> float:
+    """One figure in the unit a record holds, whatever the API published.
+
+    Rounded because dividing leaves binary-float noise that would be written
+    into the record verbatim.
+    """
+    if nutrient_id not in MILLIGRAM_IDS:
+        return amount
+    return round(amount / MG_PER_G, 6)
 
 
 def _amounts(food: dict[str, Any]) -> dict[int, float]:
@@ -114,7 +130,7 @@ def to_product(food: dict[str, Any]) -> Product:
     }
     for nutrient_id, field in NUTRIENT_IDS.items():
         if nutrient_id in amounts:
-            product[field] = amounts[nutrient_id]
+            product[field] = _grams(nutrient_id, amounts[nutrient_id])
 
     return product
 

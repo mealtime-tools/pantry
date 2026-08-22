@@ -1,9 +1,10 @@
 """Reading a nutrition panel, from a site's data or from text a user pasted.
 
-Everything downstream of this file is per 100 g, and everything upstream of it
-is a label written for humans: two columns, trace amounts written as a bound,
-energy in kilojoules, sub-rows indented under their parent. This is where that
-becomes numbers, and where a panel that did not parse is refused.
+Everything downstream of this file is grams per 100 g, and everything upstream
+of it is a label written for humans: two columns, trace amounts written as a
+bound, energy in kilojoules, milligrams for the minerals, sub-rows indented
+under their parent. This is where that becomes numbers, and where a panel that
+did not parse is refused.
 """
 
 import math
@@ -12,9 +13,22 @@ from typing import Any
 
 _KJ_PER_KCAL = 0.239006
 
-# Sodium is the one nutrient stored in milligrams: it is what every AU panel
-# prints the row in, so the common case needs no conversion at all.
-MG_PER_G = 1000
+# A label prints its mineral rows in milligrams; a record holds grams. This is
+# the only place the two units meet, because it is the only place a unit is
+# read off a human-written line.
+_MG_PER_G = 1000
+
+# Every nutrient a record may carry beyond energy and the four macros, mapped
+# to whether the figure implies food energy. Adding one is this single line:
+# the write order sorts it, and every check treats it like its neighbours. A
+# name absent from here is refused rather than stored, because a misspelled key
+# stores cleanly and then no consumer ever finds the nutrient again.
+NUTRIENTS = {"fiber": True, "sodium": False, "sugar": True}
+
+# The nutrients a confirmed zero-energy record may still hold. A mineral has no
+# calories, so table salt is a genuine 0 kcal record with 38.758 g of sodium;
+# a sugar figure beside a zero energy is a half-parsed panel.
+CALORIE_FREE = tuple(key for key, energy in NUTRIENTS.items() if not energy)
 
 # No food exceeds pure fat, which is 900 kcal per 100 g.
 _MAX_KCAL_PER_100G = 900
@@ -28,14 +42,10 @@ _QUANTITY = re.compile(
 
 # The sodium row, and only the sodium row: the word opens the line and its
 # figure follows immediately, with nothing between but the "less than" a trace
-# amount is printed as. Anchored and adjacent because additives name sodium
-# too -- "Sodium Bicarbonate (500)", "Sodium Nitrite (250)" -- and an additive
-# code sits inside sodium's plausible milligram range, so a figure read off an
-# ingredient list would pass every check downstream. Sugar survives the same
-# contamination only because the 100 g ceiling refuses it.
-#
-# A row this does not recognize reads as absent, which is the safe answer: a
-# missing sodium is unknown by contract, a wrong one is not.
+# amount is printed as. Anchored and adjacent so that an ingredient list
+# naming sodium -- "Sodium Bicarbonate (500)" -- falls through to the skip rule
+# instead. A row this does not recognize reads as absent, which is the safe
+# answer: a missing sodium is unknown by contract, a wrong one is not.
 _SODIUM_ROW = re.compile(
     r"^\s*sodium\b:?\s*(?:less\s+than\s+)?[<\d]", re.IGNORECASE
 )
@@ -176,13 +186,14 @@ def parse_panel(text: str) -> dict[str, float]:
         if not chosen:
             continue
 
-        # A label writing "Sodium 0.4g" means 400 mg, so a gram figure is
-        # converted rather than refused. Rounded because 0.4 * 1000 is
-        # 400.00000000000006 in binary floats, and that noise would be
-        # written into the record verbatim.
+        # A mineral row is printed in milligrams and a record holds grams, so
+        # "Sodium 400mg" and "Sodium 0.4g" land on the same figure. Keyed on
+        # the unit the label wrote rather than on which row it is, because the
+        # unit is the only thing that decides. Rounded because dividing leaves
+        # binary-float noise that would be written into the record verbatim.
         value, unit = chosen
-        if key == "sodium" and unit == "g":
-            value = round(value * MG_PER_G, 4)
+        if unit == "mg":
+            value = round(value / _MG_PER_G, 6)
 
         panel[key] = value
 
@@ -243,9 +254,10 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
     for key in ("protein", "fat", "carbs"):
         _check_mass(panel, key)
 
-    # Absent is fine (plenty of labels omit both) but present and wrong is
-    # not.
-    for key in ("fiber", "sugar"):
+    # Absent is fine (plenty of labels omit them) but present and wrong is
+    # not. One rule for the whole vocabulary: every figure is grams per 100 g,
+    # so the mass check is the only check any of them needs.
+    for key in NUTRIENTS:
         if panel.get(key) is not None:
             _check_mass(panel, key)
 
@@ -268,12 +280,12 @@ def nutrients_for_storage(
         return panel
 
     # A confirmation may fill an absent or all-zero panel, but never erase
-    # nutrition that was actually printed. Sodium is exempt because it carries
-    # no energy: table salt is a genuine 0 kcal record with 38,758 mg of it.
-    # An impossible figure is not waved through with it -- `_check_number` is
-    # what refuses that, on the record every one of these panels becomes.
+    # nutrition that was actually printed. A calorie-free nutrient is exempt
+    # because it is not part of the energy claim being confirmed. An impossible
+    # figure is not waved through with it -- `_check_number` is what refuses
+    # that, on the record every one of these panels becomes.
     for key, value in panel.items():
-        if key == "sodium":
+        if key in CALORIE_FREE:
             continue
         if value is not None and (not math.isfinite(value) or value != 0):
             raise NutritionError(
@@ -281,7 +293,8 @@ def nutrients_for_storage(
             )
 
     zeroed: dict[str, float] = {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0}
-    if panel.get("sodium") is not None:
-        zeroed["sodium"] = panel["sodium"]
+    zeroed.update(
+        {k: panel[k] for k in CALORIE_FREE if panel.get(k) is not None}
+    )
 
     return zeroed

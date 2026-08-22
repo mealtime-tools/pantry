@@ -43,9 +43,12 @@ def test_nutrients_are_read_per_hundred_grams_not_per_serving() -> None:
     assert product["protein"] != 10.0
 
 
-def test_sodium_is_kept_in_the_milligrams_usda_publishes() -> None:
-    """Nutrient 1093 is mg per 100 g, which is already the stored unit."""
-    assert to_product(BRANDED)["sodium"] == 17.0
+def test_sodium_is_converted_from_the_milligrams_usda_publishes() -> None:
+    """Nutrient 1093 is mg per 100 g; a record holds grams, like every key."""
+    assert to_product(BRANDED)["sodium"] == 0.017
+
+    # The grams the API already publishes are carried untouched beside it.
+    assert to_product(BRANDED)["fiber"] == 6.7
 
 
 def test_identity_brand_and_url_come_from_the_record() -> None:

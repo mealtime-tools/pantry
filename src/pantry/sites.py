@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from pantry.ids import normalize_id
 from pantry.nutrition import (
+    NUTRIENTS,
     nutrients_for_storage,
     parse_amount,
     parse_panel,
@@ -223,11 +224,7 @@ def build_record(
     optional = {
         # Present only when the label printed kilojoules; never derived back.
         "kj": panel.get("kj"),
-        "fiber": panel.get("fiber"),
-        "sugar": panel.get("sugar"),
-        # Milligrams, as the panel printed it; every figure beside it is
-        # grams.
-        "sodium": panel.get("sodium"),
+        **{key: panel.get(key) for key in NUTRIENTS},
         # Absent unless a caller declares one: an unmarked record is as-sold.
         "basis": basis,
         "basis_note": basis_note,
