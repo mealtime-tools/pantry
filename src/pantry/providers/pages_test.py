@@ -128,7 +128,7 @@ def test_a_good_page_is_stored_immediately(make_deps, run, store_path) -> None:
     # The filename records the source, so the row does not repeat it.
     assert stored.startswith('{"id":"1047"')
     assert '"source"' not in stored
-    assert '"kj":980' in stored and '"kcal":234.2' in stored
+    assert '"kcal":234.2' in stored
     # The panel's 400 mg sodium row survives the page as the grams a record
     # holds, sorted in beside the other vocabulary nutrients.
     # Saturated fat comes across too, now that a structured row is resolved

@@ -6,17 +6,18 @@ The order never changes and the order is the point — resolve the reference,
 check what is already held, and only then let a provider spend anything.
 """
 
+import json
+
 import click
 from agentcli import UsageError, emit, json_option
 
-from nutrition.figures import read_rows
+from nutrition import panel
 
 from pantry.commands.describe import describe
 from pantry.ids import normalize_id
 from pantry.nutrition import (
     nutrients_for_storage,
     parse_amount,
-    parse_panel,
     reconciliation_note,
 )
 from pantry.products import (
@@ -118,16 +119,29 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
     ]
 
 
-def _stated_rows(nutrients: tuple[str, ...]) -> list[tuple[str, str]]:
-    """`-n sodium=355mg` as the rows a structured source would have given."""
-    rows = []
+def _flag_pairs(nutrients: tuple[str, ...]) -> list[tuple[str, str]]:
+    """`-n sodium:400mg` as the name and written figure a source would give."""
+    pairs = []
     for stated in nutrients:
-        name, separator, value = stated.partition("=")
-        if not separator or not name.strip() or not value.strip():
-            raise UsageError(f"--nutrient wants NAME=VALUE, not {stated!r}")
-        rows.append((name.strip(), value.strip()))
+        name, separator, written = stated.partition(":")
+        if not separator or not name.strip() or not written.strip():
+            raise UsageError(f"--nutrient wants NAME:VALUE, not {stated!r}")
+        pairs.append((name.strip(), written.strip()))
 
-    return rows
+    return pairs
+
+
+def _piped_panel(text: str) -> dict[str, float]:
+    """A panel piped in as the JSON another tool emitted."""
+    if not text.strip():
+        return {}
+
+    try:
+        decoded = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise UsageError(f"a piped panel is JSON: {error}") from None
+
+    return panel.from_json(decoded)
 
 
 @click.command("add")
@@ -145,9 +159,9 @@ def _stated_rows(nutrients: tuple[str, ...]) -> list[tuple[str, str]]:
     "-n",
     "nutrients",
     multiple=True,
-    metavar="NAME=VALUE",
-    help="State one row outright, e.g. -n sodium=355mg. Repeatable, and"
-    " skips reading a panel from stdin.",
+    metavar="NAME:VALUE",
+    help="One panel row, e.g. -n sodium:355mg. Repeatable. The same panel"
+    " can be piped in instead, as one line.",
 )
 @click.option("--name", help="The product name as the label prints it.")
 @click.option("--brand", default="", help="The brand, if the label names one.")
@@ -374,21 +388,26 @@ def _manual_record(
     if not name:
         raise UsageError("a manual entry needs --name")
 
-    # A stated row needs none of a pasted panel's guesswork: no column to
-    # choose, no name to find in a line, and its unit is written down.
-    figures = (
-        read_rows(_stated_rows(nutrients))
-        if nutrients
-        else parse_panel(state.read_stdin(optional=zero_calorie))
-    )
-    panel = nutrients_for_storage(figures, zero_calorie)
+    # Flags for a person typing, JSON for a tool piping. The flags carry their
+    # own units because that is how a label prints them; the JSON does not,
+    # because a panel is already grams and kcal by the time it is one.
+    try:
+        figures = (
+            panel.read_pairs(_flag_pairs(nutrients))
+            if nutrients
+            else _piped_panel(state.read_stdin(optional=zero_calorie))
+        )
+    except panel.PanelError as error:
+        raise UsageError(str(error)) from None
+
+    stored = nutrients_for_storage(figures, zero_calorie)
 
     return build_record(
         source=reference.source if reference else "manual",
         product_id=identifier,
         name=name,
         brand=brand,
-        panel=panel,
+        panel=stored,
         url=reference.url if reference else None,
         serving=parse_amount(serving),
         total=parse_amount(total),

@@ -1,23 +1,23 @@
-"""Reading a nutrition panel, from a site's data or from text a user pasted.
+"""What a stored panel has to survive, per 100 g.
 
-Everything downstream of this file is grams per 100 g, and everything upstream
-of it is a label written for humans: two columns, trace amounts written as a
-bound, energy in kilojoules, milligrams for the minerals, sub-rows indented
-under their parent. This is where that becomes numbers, and where a panel that
-did not parse is refused.
+Reading a panel is not this module's job. A figure arrives already separated
+from its name and its unit -- `nutrition.panel` does that, the same way for a
+string a caller passed and for a retailer's own rows -- and what is left here
+is the part that is actually pantry's: whether a per-100 g panel is worth
+storing at all.
 
-What a nutrient is called, what unit it is written in and how much energy it
-carries all live in `nutrition`, the domain the mealtime tools share. What is
-left here is the part that is about a per-100 g product record: the two
-ceilings, the zero-calorie declaration, and the column and layout heuristics a
-pasted label needs and a structured row does not.
+Turning a photographed label or a pasted web page into that format is the
+agent's job, not this CLI's. A CLI that guesses at prose has to guess wrong
+sometimes, and every wrong guess is a number somebody trusts. Everything that
+used to guess -- which column was per 100 g, which line was which row, which
+of two figures on a line to take -- is gone, and so is every bug it caused.
 """
 
 import math
 import re
 from typing import Any
 
-from nutrition import energy, figures, vocabulary
+from nutrition import energy, vocabulary
 
 # Every nutrient a record may carry beyond energy and the three macros, taken
 # from the shared vocabulary rather than listed again. The three are excluded
@@ -34,7 +34,7 @@ NUTRIENTS = tuple(
 
 # The nutrients a confirmed zero-energy record may still hold. A mineral has no
 # calories, so table salt is a genuine 0 kcal record with 38.758 g of sodium;
-# a sugar figure beside a zero energy is a half-parsed panel.
+# a sugar figure beside a zero energy is a contradiction.
 CALORIE_FREE = tuple(
     key for key in NUTRIENTS if not vocabulary.carries_energy(key)
 )
@@ -45,54 +45,11 @@ _MAX_KCAL_PER_100G = 900
 # Rounding on a label lets the three macros total slightly over 100 g.
 _MASS_TOLERANCE = 105
 
-# The sodium row, and only the sodium row: the word opens the line and its
-# figure follows immediately, with nothing between but the "less than" a trace
-# amount is printed as. Anchored and adjacent so that an ingredient list
-# naming sodium -- "Sodium Bicarbonate (500)" -- falls through to the skip rule
-# instead. A row this does not recognize reads as absent, which is the safe
-# answer: a missing sodium is unknown by contract, a wrong one is not.
-_SODIUM_ROW = re.compile(
-    r"^\s*sodium\b:?\s*(?:less\s+than\s+)?[<\d]", re.IGNORECASE
-)
-
-# The rows this parser recognizes, in the order it tries them. First match
-# wins, so sodium leads: any other line naming it is skipped on the next rule,
-# which is what keeps "Sodium Bicarbonate (500)" out of the *carbohydrates* row
-# it would otherwise match on "bicarbonate". Skipped rows come next: "-
-# Saturated" would otherwise match the fat row, and "Sugars" and "Dietary
-# Fibre" both sit under carbohydrate on a label.
-#
-# Only a pasted label needs this. A structured source states its own row names
-# and `figures.read_rows` resolves them whole, which is why the two paths do
-# not share a pattern: hunting a name out of a line is the ambiguity, not the
-# vocabulary.
-_ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    # Read, unlike the salt row below it: salt is 2.5 times its sodium, so
-    # taking one for the other would overstate the figure by 150 percent.
-    ("sodium", _SODIUM_ROW),
-    (
-        "skip",
-        re.compile(
-            r"saturat|trans|monounsat|polyunsat|sodium|salt"
-            r"|cholesterol|potassium",
-            re.IGNORECASE,
-        ),
-    ),
-    ("sugar", re.compile(r"sugar", re.IGNORECASE)),
-    ("dietary_fiber", re.compile(r"fib(?:re|er)", re.IGNORECASE)),
-    ("protein", re.compile(r"protein", re.IGNORECASE)),
-    ("carbohydrates", re.compile(r"carb", re.IGNORECASE)),
-    ("fat", re.compile(r"fat", re.IGNORECASE)),
-    ("kcal", re.compile(r"energy|kilojoule|calorie", re.IGNORECASE)),
-)
-
-# The units a pack or serving size is written in, at the end of the figure.
-# Not a nutrient unit: a pack is millilitres as often as grams, and neither is
-# a share of the 100 g a panel describes.
-_UNIT = re.compile(r"(kg|ml|l|g)\s*$", re.IGNORECASE)
-
-_PER_HUNDRED = re.compile(r"per\s*100\s*(?:g|ml)", re.IGNORECASE)
-_PER_SERVING = re.compile(r"per\s*serv", re.IGNORECASE)
+# A pack or serving size, which is packaging rather than nutrition: "450g" is
+# a size, not a panel row, and it is the one written figure left in this file.
+# A pack is millilitres as often as grams, and neither is a share of the 100 g
+# a panel describes.
+_SIZE = re.compile(r"^\s*([\d,.]+)\s*(kg|ml|l|g)\s*$", re.IGNORECASE)
 
 
 class NutritionError(ValueError):
@@ -102,100 +59,19 @@ class NutritionError(ValueError):
 def parse_amount(text: str | None) -> tuple[float | None, str | None]:
     """Split "450g" or "650 ml" into the number and unit a record stores.
 
-    Both halves or neither. A community quantity such as "4 * 125 g (500 g)"
-    reads as the number 4, and storing that without a unit would claim a
-    450 g loaf and a 4-pack are the same size — a wrong value, not a missing
-    one.
+    Both halves or neither, and only when the whole string is one size. A
+    quantity such as "4 * 125 g (500 g)" has no single answer, so it gets
+    none: storing the 4 without a unit would claim a 450 g loaf and a 4-pack
+    are the same size, which is a wrong value rather than a missing one.
     """
-    match = _UNIT.search(text) if text else None
-    if match is None:
+    found = _SIZE.match(text or "")
+    if found is None:
         return (None, None)
 
-    found = figures.figures(text)
-    return (found[0][0] if found else None, match.group(1).lower())
-
-
-def _row_key(label: str) -> str | None:
-    for key, pattern in _ROWS:
-        if pattern.search(label):
-            return key
-    return None
-
-
-def _per_hundred_first(text: str) -> bool:
-    """Whether the per-100 g figures are the first column, not the last.
-
-    The Australian standard puts "per serving" first and "per 100 g" second,
-    so the last number on a row is the right one by default. A label that
-    reverses them says so in its header, the only place the two are named.
-    """
-    hundred = _PER_HUNDRED.search(text)
-    serving = _PER_SERVING.search(text)
-    if not hundred or not serving:
-        return False
-    return hundred.start() < serving.start()
-
-
-def _column(found: list[tuple[float, str]], first: bool):
-    """The figure belonging to the per-100 g column of one row."""
-    if not found:
-        return None
-    return found[0] if first else found[-1]
-
-
-def parse_panel(text: str) -> dict[str, float]:
-    """Read a nutrition panel out of pasted text.
-
-    Rows it does not recognize are ignored and rows that are absent stay
-    absent; `nutrients_for_storage` decides whether what came out is enough.
-    """
-    first = _per_hundred_first(text)
-    panel: dict[str, float] = {}
-
-    for line in text.split("\n"):
-        key = _row_key(line)
-        if key is None or key == "skip":
-            continue
-
-        found = figures.figures(line)
-        if not found:
-            continue
-
-        if key == "kcal":
-            _read_energy(panel, found, first)
-            continue
-
-        chosen = _column(found, first)
-        if not chosen:
-            continue
-
-        panel[key] = figures.grams(key, chosen[0], chosen[1])
-
-    return panel
-
-
-def _read_energy(
-    panel: dict[str, float], found: list[tuple[float, str]], first: bool
-) -> None:
-    """Energy is the one row that can carry two units in a single column.
-
-    A label writing "1000kJ (239Cal)" already did the arithmetic, and its own
-    calorie figure beats converting the kilojoules ourselves. Both forms are
-    kept when kilojoules were printed: kcal because everything downstream
-    reads it, kj because deriving it back would invent a figure nobody wrote.
-    """
-    calories = [q for q in found if q[1] in figures.KCAL_SPELLINGS]
-    chosen = _column(calories or found, first)
-    if not chosen:
-        return
-
-    value, unit = chosen
-    panel["kcal"] = figures.energy_kcal(value, unit)
-
-    # Anything that is not a calorie spelling is kilojoules, a bare figure
-    # included: that is what an AU panel prints when it prints one unit.
-    if unit not in figures.KCAL_SPELLINGS:
-        panel["kj"] = value
+    try:
+        return (float(found.group(1).replace(",", "")), found.group(2).lower())
+    except ValueError:
+        return (None, None)
 
 
 def _check_mass(panel: dict[str, Any], key: str) -> None:
@@ -213,12 +89,29 @@ def _check_mass(panel: dict[str, Any], key: str) -> None:
         )
 
 
+def reconciliation_note(panel: dict[str, float]) -> str | None:
+    """Why the macros cannot account for the stated energy, if they cannot.
+
+    A warning rather than a refusal, and that split is deliberate. The check is
+    shared with eatout, which refuses on it because its data is reviewed by
+    hand. A scraped corpus is not: roughly a twentieth of real retailer panels
+    fail for honest reasons -- fibre energy an Australian label excludes from
+    carbohydrate, polyols in a sugar-free product, alcohol nobody declared.
+    """
+    try:
+        energy.assert_energy_reconciles(panel.get("kcal") or 0.0, panel)
+    except ValueError as error:
+        return str(error)
+
+    return None
+
+
 def assert_usable_nutrients(panel: dict[str, Any]) -> None:
     """Refuse a panel that is not worth storing.
 
-    The failure this exists to prevent is a half-parsed panel becoming a
-    product with inferred zero calories: nothing downstream would flag it, and
-    every recipe using that ingredient would quietly under-count.
+    The failure this exists to prevent is a partial panel becoming a product
+    with inferred zero calories: nothing downstream would flag it, and every
+    recipe using that ingredient would quietly under-count.
     """
     kcal = panel.get("kcal")
     if kcal is None or not math.isfinite(kcal) or kcal <= 0:
@@ -231,65 +124,20 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
     for key in energy.REQUIRED:
         _check_mass(panel, key)
 
-    # Absent is fine (plenty of labels omit them) but present and wrong is
-    # not. One rule for the whole vocabulary: every figure is grams per 100 g,
-    # so the mass check is the only check any of them needs.
+    # Absent is fine -- plenty of labels omit them -- but present and wrong is
+    # not. One rule for the whole vocabulary, because every figure is grams per
+    # 100 g and the mass check is the only check any of them needs.
     for key in NUTRIENTS:
         if panel.get(key) is not None:
             _check_mass(panel, key)
 
-    # Catches the two mistakes a per-100 g figure cannot survive: a
-    # per-serving column read by mistake, and a milligram figure landing in a
-    # gram field.
+    # The one mistake a per-100 g figure cannot survive on its own: a
+    # per-serving column stored as if it described 100 g.
     mass = sum(panel[key] for key in energy.REQUIRED)
     if mass > _MASS_TOLERANCE:
         raise NutritionError(
             f"nutrition panel holds {mass:.1f} g of macros per 100 g"
         )
-
-    # Whether the macros account for the energy is deliberately not checked
-    # here: it is a warning rather than a refusal, and `reconciliation_note`
-    # is where it is worded.
-
-
-def reconciliation_note(panel: dict[str, Any]) -> str | None:
-    """Whether a panel's macros account for the energy printed beside them.
-
-    Advisory, not a refusal, and that split is the whole reason the arithmetic
-    lives in a shared library while this decision does not. Measured: 635 of
-    the 11,885 frozen rows do not reconcile, and most for legitimate reasons --
-    polyols, which an AU label excludes from carbohydrate, and alcohol, whose
-    7 kcal a gram nothing can account for until a source states an ethanol
-    figure. Refusing on that basis would turn one in nineteen real retailer
-    products away.
-
-    A per-serve column read against a per-100 g one is in there too, and that
-    is the silent error no ceiling here can catch, so it is said out loud
-    rather than either refused or swallowed. eatout refuses on the same check
-    because its data is curated per serving; pantry's is whatever a retailer
-    published, so pantry warns.
-
-    The tolerance stays the library's -- asked by calling its refusal rather
-    than reimplementing it -- and only the wording is pantry's.
-    """
-    kcal = panel.get("kcal")
-    if not isinstance(kcal, (int, float)) or isinstance(kcal, bool):
-        return None
-
-    try:
-        energy.assert_energy_reconciles(float(kcal), panel)
-    except energy.EnergyError:
-        accounted = energy.atwater_kcal(panel)
-        if accounted is None:
-            return None
-        return (
-            "energy unreconciled: protein, fat and carbohydrates account for"
-            f" {accounted:.0f} kcal against the stated {float(kcal):.0f} kcal,"
-            f" a gap of {accounted - float(kcal):+.0f} kcal;"
-            " check the panel read one column and not two"
-        )
-
-    return None
 
 
 def nutrients_for_storage(
@@ -301,10 +149,8 @@ def nutrients_for_storage(
         return panel
 
     # A confirmation may fill an absent or all-zero panel, but never erase
-    # nutrition that was actually printed. A calorie-free nutrient is exempt
-    # because it is not part of the energy claim being confirmed. An impossible
-    # figure is not waved through with it -- `_check_number` is what refuses
-    # that, on the record every one of these panels becomes.
+    # nutrition that was actually stated. A calorie-free nutrient is exempt
+    # because it is not part of the energy claim being confirmed.
     for key, value in panel.items():
         if key in CALORIE_FREE:
             continue
@@ -313,8 +159,8 @@ def nutrients_for_storage(
                 f"--zero-calorie conflicts with nutrition panel {key}: {value}"
             )
 
-    zeroed: dict[str, float] = {"kcal": 0}
-    zeroed.update({key: 0 for key in energy.REQUIRED})
+    zeroed: dict[str, float] = {"kcal": 0.0}
+    zeroed.update({key: 0.0 for key in energy.REQUIRED})
     zeroed.update(
         {k: panel[k] for k in CALORIE_FREE if panel.get(k) is not None}
     )

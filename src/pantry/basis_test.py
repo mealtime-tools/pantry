@@ -32,7 +32,6 @@ PREPARED = {
     "id": "98548",
     "name": "Vegetable Stock Cubes",
     "brand": "Massel",
-    "kj": 23,
     "fat": 0.35,
     "carbohydrates": 0.53,
     "protein": 0,
@@ -55,7 +54,10 @@ AS_SOLD = {
     "carbohydrates": 39.2,
 }
 
-PANEL = "Energy 23kJ\nProtein 0g\nFat 0.35g\nCarbohydrate 0.53g"
+# A panel as another tool would hand it over: JSON, grams, kcal.
+PANEL = json.dumps(
+    {"kcal": 5.5, "protein": 0, "fat": 0.35, "carbohydrates": 0.53}
+)
 
 NOTE = "per 100 mL prepared; 1 cube (10.5 g) makes 500 mL"
 
@@ -66,7 +68,6 @@ HELD_CUBES = {
     "id": "98548",
     "name": "Vegetable Stock Cubes",
     "brand": "Massel",
-    "kj": 23,
     "fat": 0.35,
     "carbohydrates": 0.53,
     "protein": 0,
@@ -91,7 +92,7 @@ def test_basis_round_trips_in_the_fixed_key_order() -> None:
         '{"id":"98548","name":"Vegetable Stock Cubes","brand":"Massel",'
         '"url":"https://example.com/ultracube-vegetable",'
         '"total_size":105,"total_unit":"g",'
-        '"kcal":5.5,"kj":23,"protein":0,"fat":0.35,"carbohydrates":0.53,'
+        '"kcal":5.5,"protein":0,"fat":0.35,"carbohydrates":0.53,'
         f'"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )
 
@@ -358,7 +359,7 @@ def test_re_adding_a_record_keeps_the_fields_the_paste_leaves_out(
         '{"id":"98548","name":"Vegetable Stock Cubes","brand":"Massel",'
         '"url":"https://www.coles.com.au/product/example-98548",'
         '"total_size":105,"total_unit":"g",'
-        '"kcal":5.5,"kj":23,"protein":0,"fat":0.35,"carbohydrates":0.53,'
+        '"kcal":5.5,"protein":0,"fat":0.35,"carbohydrates":0.53,'
         f'"dietary_fiber":0.035,"sugar":0.32,'
         f'"basis":"as_prepared","basis_note":"{NOTE}"}}\n'
     )

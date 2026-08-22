@@ -68,10 +68,10 @@ PRODUCT_KEYS = (
 # `energy.REQUIRED` and not `energy.KCAL_PER_GRAM`: alcohol carries an Atwater
 # factor without being one of the three every panel states, so requiring it
 # here would refuse every record that is not a drink.
-CORE_NUTRIENTS = ("kcal", "kj", *energy.REQUIRED)
-
-# The figures every record carries, so a consumer may default them. `kj` is
-# absent: it is stored only when a label printed it.
+# The figures every record carries, so a consumer may default them and a
+# panel missing one is refused. Energy is calories only: kilojoules are
+# `kcal * 4.184` exactly, and a second field for a derived figure is a second
+# thing to keep in step.
 CORE_FIGURES = ("kcal", *energy.REQUIRED)
 
 # Written last, after the figures they qualify, so a line read by eye carries
@@ -83,9 +83,8 @@ Product = dict[str, Any]
 _REQUIRED_NUMBERS = CORE_FIGURES
 
 # Figures that may be absent and are not nutrients, so the vocabulary rules do
-# not apply: `kj` is stored only when a label printed it, and a pack size is a
-# mass rather than a share of one.
-_OPTIONAL_SIZES = ("kj", "serving_size", "total_size")
+# not apply: a pack size is a mass rather than a share of one.
+_OPTIONAL_SIZES = ("serving_size", "total_size")
 
 # Grams per 100 g, so 100 is the ceiling for every nutrient alike. Pure table
 # salt is only 38.758 g of sodium, so nothing edible comes near it.
@@ -95,7 +94,7 @@ _MAX_PER_100G = 100
 # a misspelling far more often than it is a new field, and `sodum` would store
 # cleanly and then no consumer would ever find the sodium again.
 _ALLOWED_KEYS = frozenset(
-    (*PRODUCT_KEYS, *CORE_NUTRIENTS, *NUTRIENTS, *BASIS_KEYS)
+    (*PRODUCT_KEYS, *CORE_FIGURES, *NUTRIENTS, *BASIS_KEYS)
 )
 
 
@@ -179,7 +178,7 @@ def record_keys(product: Product) -> tuple[str, ...]:
     enumerate them: adding one changes no order and diffs no other line.
     """
     held = sorted(key for key in product if key in NUTRIENTS)
-    return (*PRODUCT_KEYS, *CORE_NUTRIENTS, *held, *BASIS_KEYS)
+    return (*PRODUCT_KEYS, *CORE_FIGURES, *held, *BASIS_KEYS)
 
 
 def assert_product_record(product: Product) -> None:
@@ -217,7 +216,7 @@ def assert_exportable_product(product: Product) -> None:
     # calorie-free nutrient is exempt: table salt is a genuine 0 kcal record
     # with 38.758 g of sodium in it.
     if product.get("kcal") == 0:
-        claimed = (*CORE_NUTRIENTS, *NUTRIENTS)
+        claimed = (*CORE_FIGURES, *NUTRIENTS)
         for key in (k for k in claimed if k not in CALORIE_FREE):
             value = product.get(key)
             if value is not None and value != 0:

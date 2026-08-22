@@ -19,11 +19,11 @@ from pantry.products import (
 SHARDS = {
     "coles": (
         10297,
-        "13aecf4dc7e27b7910c5e3437edbc8932a31169b07fd7ff8b4fda09f6f795b58",
+        "daaff67f11b73b64240e881df6fcc51802d93f69a7435358b8cd17e9f354af4d",
     ),
     "afcd": (
         1588,
-        "b844303b4449b4f56bbe6072eca3bdb904101f0dde6d80c549d81dc7c48db5fe",
+        "cb43ef1526ca490cf9a2deea9026c860442f1dab8e7a19ef05fd90786c637612",
     ),
 }
 

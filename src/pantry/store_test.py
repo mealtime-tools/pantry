@@ -1,6 +1,7 @@
 """Rule 9: where user data may land, and that base data is never written."""
 
 import hashlib
+import json
 from pathlib import Path
 
 
@@ -106,7 +107,9 @@ def test_user_data_stays_out_of_every_checkout(
         else None
     )
 
-    panel = "Energy 1000kJ\nProtein 9.5g\nFat 3.4g\nCarbohydrate 39.2g"
+    panel = json.dumps(
+        {"kcal": 239.01, "protein": 9.5, "fat": 3.4, "carbohydrates": 39.2}
+    )
     deps = make_deps(list(BASE))
     added = run(
         deps, "add", "--manual", "--id", "loaf", "--name", "Loaf", stdin=panel
