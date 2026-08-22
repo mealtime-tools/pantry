@@ -3,6 +3,10 @@
 Nutrients are per 100 g, everywhere, always. A consumer scales by
 `grams / 100` at the point of display; storing a pre-scaled value would make
 editing an amount wrong in a way no test would catch.
+
+Every nutrient is grams except `sodium`, which is milligrams: it is the unit
+every nutrition panel prints that row in, so the common case needs no
+conversion at all.
 """
 
 import json
@@ -11,7 +15,7 @@ from typing import Any
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
-from pantry.nutrition import assert_usable_nutrients
+from pantry.nutrition import MG_PER_G, assert_usable_nutrients
 
 # The data owners. `localstore` is deliberately absent: it is a storage
 # layer, and
@@ -47,6 +51,9 @@ PRODUCT_KEYS = (
     "protein",
     "fiber",
     "sugar",
+    # Milligrams, not grams. The only key whose unit differs from its
+    # neighbours, because the label it is read off is written that way.
+    "sodium",
     "kcal",
     # The basis sits with the figures it qualifies rather than with the
     # packaging fields, so a line read by eye carries the caveat beside the
@@ -64,6 +71,11 @@ Product = dict[str, Any]
 
 _REQUIRED_NUMBERS = ("kcal", "protein", "fat", "carbs")
 _OPTIONAL_NUMBERS = ("kj", "fiber", "sugar", "serving_size", "total_size")
+
+# 100 g of sodium per 100 g, in the milligrams sodium is stored in. The
+# nutrition rules cap every other figure at 100 g, and pure table salt is only
+# 38,758 mg, so nothing edible comes near this.
+_MAX_SODIUM_MG = 100 * MG_PER_G
 
 
 class ProductError(ValueError):
@@ -93,8 +105,10 @@ def assert_identity(product: Product) -> None:
             raise ProductError(f"product needs a {key}")
 
 
-def _check_number(product: Product, key: str, optional: bool) -> None:
-    """Reject a figure that is absent, not a number, or negative."""
+def _check_number(
+    product: Product, key: str, optional: bool, maximum: float | None = None
+) -> None:
+    """Reject a figure that is absent, not a number, negative, or too big."""
     value = product.get(key)
     if value is None:
         if optional:
@@ -104,6 +118,8 @@ def _check_number(product: Product, key: str, optional: bool) -> None:
     numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
     if not numeric or not math.isfinite(value) or value < 0:
         raise ProductError(f"{_label(product)} has invalid {key}: {value}")
+    if maximum is not None and value > maximum:
+        raise ProductError(f"{_label(product)} has implausible {key}: {value}")
 
 
 def _check_basis(product: Product) -> None:
@@ -140,6 +156,11 @@ def assert_product_record(product: Product) -> None:
     for key in _OPTIONAL_NUMBERS:
         _check_number(product, key, optional=True)
 
+    # Checked here rather than with the panel rules because both zero-energy
+    # paths return before those run, and sodium is the only figure they carry
+    # through. Every path that authors one reaches this function.
+    _check_number(product, "sodium", optional=True, maximum=_MAX_SODIUM_MG)
+
     _check_basis(product)
 
 
@@ -149,6 +170,8 @@ def assert_exportable_product(product: Product) -> None:
 
     # A confirmed zero-calorie record is the one shape the nutrition rules
     # cannot express, so it is checked for internal consistency instead.
+    # Sodium is absent from the list below on purpose: it carries no energy,
+    # so table salt is a genuine 0 kcal record with 38,758 mg of it.
     if product.get("kcal") == 0:
         for key in ("kj", "protein", "fat", "carbs", "fiber", "sugar"):
             value = product.get(key)

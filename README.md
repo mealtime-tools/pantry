@@ -51,9 +51,12 @@ environment enables the USDA source; without one it is skipped silently.
 ### Record contract
 
 Nutrients are per 100 g. Consumers scale by `grams / 100`; Pantry never stores
-a pre-scaled nutrient. Identity is `(source, id)`, with source-native string
-ids normalised at ingress. Pantry supports `coles`, `woolworths`, `afcd`,
-`usda`, `manual`, and `openfoodfacts`.
+a pre-scaled nutrient. Every figure is grams except `sodium`, which is
+milligrams per 100 g — the unit its label row prints, so the common case needs
+no conversion. An absent `sodium` is unknown, never zero. Identity is
+`(source, id)`, with source-native string ids normalised at ingress. Pantry
+supports `coles`, `woolworths`, `afcd`, `usda`, `manual`, and
+`openfoodfacts`.
 Recipes deliberately accepts only its documented resolvable subset.
 
 Nutrients are per 100 g of the product **as sold** unless the record carries
@@ -82,7 +85,8 @@ JSONL keys have this fixed order, because a one-product edit must remain a
 one-line diff:
 
 ```
-source id name brand kj fat carbs protein fiber sugar kcal basis basis_note
+source id name brand kj fat carbs protein fiber sugar sodium kcal basis
+basis_note
 url serving_size serving_unit total_size total_unit
 ```
 

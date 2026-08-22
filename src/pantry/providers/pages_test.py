@@ -129,6 +129,8 @@ def test_a_good_page_is_stored_immediately(make_deps, run, store_path) -> None:
     assert stored.startswith('{"id":"1047"')
     assert '"source"' not in stored
     assert '"kj":980' in stored and '"kcal":234.2' in stored
+    # The panel's sodium row survives the page, in the milligrams it printed.
+    assert '"sugar":2.2,"sodium":400,"kcal":234.2' in stored
 
 
 def test_a_refresh_reports_its_changes_and_needs_the_record_held(

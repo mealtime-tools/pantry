@@ -1,11 +1,17 @@
-"""Rules 1 and 7: the frozen bytes, and how ids order."""
+"""Rules 1 and 7: the frozen bytes, how ids order, and the key order."""
 
 import hashlib
 
 import pytest
 
 from pantry.data import data_dir
-from pantry.products import format_jsonl, parse_jsonl
+from pantry.products import (
+    ProductError,
+    assert_exportable_product,
+    assert_product_record,
+    format_jsonl,
+    parse_jsonl,
+)
 
 # Measured, not theoretical. `coles.jsonl` came from a scrape that no longer
 # exists and cannot be regenerated, so any change to the serializer that would
@@ -66,3 +72,75 @@ def test_leading_zero_ids_stay_distinct_and_sort_by_length() -> None:
 
     # Length before codepoint, and "09" never collapses into "9".
     assert written == ["9", "09", "10", "0009"]
+
+
+# Written with sodium first, so the fixed key order has something to fix.
+STOCK_CUBE = {
+    "sodium": 17750.0,
+    "source": "manual",
+    "id": "stock-cube",
+    "name": "Vegetable Stock Cube",
+    "brand": "Example",
+    "sugar": 2.0,
+    "kcal": 200.0,
+    "protein": 5.0,
+    "fat": 1.0,
+    "carbs": 40.0,
+}
+
+
+def test_sodium_is_written_in_milligrams_between_sugar_and_kcal() -> None:
+    written = format_jsonl([STOCK_CUBE])
+
+    # Milligrams, unlike every gram figure beside it, and in the one position
+    # the key order allows: a moved key is a whole-file diff.
+    assert '"sugar":2,"sodium":17750,"kcal":200' in written
+
+
+def test_a_record_with_no_sodium_stays_without_one() -> None:
+    plain = {k: v for k, v in STOCK_CUBE.items() if k != "sodium"}
+
+    # Optional, so its absence is not an error, and never filled with a zero
+    # that would read as a sodium-free product.
+    assert_product_record(plain)
+    assert "sodium" not in format_jsonl([plain])
+    assert parse_jsonl(format_jsonl([plain]))[0] == plain
+
+
+@pytest.mark.parametrize(
+    "value",
+    [-1, "355", float("inf"), 100_001],
+    ids=["negative", "string", "infinite", "over-ceiling"],
+)
+def test_an_unusable_sodium_is_refused_rather_than_dropped(value) -> None:
+    # The ceiling is 100 g of sodium per 100 g, in milligrams. Pure table salt
+    # is 38,758 mg, so nothing edible is anywhere near it.
+    with pytest.raises(ProductError, match="sodium"):
+        assert_product_record({**STOCK_CUBE, "sodium": value})
+
+
+# Table salt: the record shape the zero-energy rules have to allow.
+TABLE_SALT = {
+    "source": "manual",
+    "id": "table-salt",
+    "name": "Table Salt",
+    "brand": "Example",
+    "kcal": 0,
+    "protein": 0,
+    "fat": 0,
+    "carbs": 0,
+    "sodium": 38758.0,
+}
+
+
+def test_a_zero_energy_record_may_still_carry_sodium() -> None:
+    # Sodium carries no energy, so it is the one figure the zero-energy
+    # consistency check must not read as a contradiction.
+    assert_exportable_product(TABLE_SALT)
+
+
+def test_a_zero_energy_record_still_has_its_sodium_checked() -> None:
+    # This branch returns before the panel rules run, which is why the ceiling
+    # lives with the record checks that every authoring path reaches.
+    with pytest.raises(ProductError, match="sodium"):
+        assert_exportable_product({**TABLE_SALT, "sodium": 500_000})

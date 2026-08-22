@@ -18,6 +18,10 @@ NUTRIENTS
   Every figure in every record is per 100 g. Scale by grams / 100 at the point
   of display. Never store a pre-scaled value.
 
+  Every figure is grams except sodium, which is milligrams per 100 g: the unit
+  its label row prints, so the common case needs no conversion. An absent
+  sodium is unknown, never zero -- the frozen shards predate the key.
+
   Per 100 g as sold, unless the record carries `basis`: as_sold or
   as_prepared, absent meaning as_sold. An as_prepared panel was printed for
   the made-up food, so scaling it by a dry weight is wrong by whatever the
@@ -93,6 +97,18 @@ ADD ONE RECORD
   and would let your own entry for the same barcode overwrite it. It is
   community data, not proof of current availability.
 
+  A Sodium row is read in milligrams, converting a gram figure such as
+  "Sodium 0.4g" to 400 and storing a trace bound such as "LESS THAN 5mg" as
+  the bound. A Salt row is not read at all: salt is 2.5 times its sodium, and
+  reading one as the other would overstate it by 150 percent.
+
+  To be read, the row must open its line and be followed by its figure. That
+  rules out an additive -- "Sodium Bicarbonate (500)", whose code looks like a
+  plausible milligram figure -- and with it "Sodium (as salt)", "Sodium (g)
+  0.4" (only a unit on the figure can be converted) and a row wrapped in
+  markup. A declined row is absent from the record rather than guessed at, and
+  nothing warns about it.
+
   --manual reads the panel from stdin and never touches the network; with a
   retailer url it keeps that identity, so a blocked page is a redirection and
   not a dead end. Two-column labels are handled: the per-100 g column wins,
@@ -125,7 +141,10 @@ NEVER INFER ZEROS
   A missing, malformed or unreadable nutrition value is refused, not coerced.
   An inferred zero silently under-counts every recipe downstream. The one
   exception is --zero-calorie, which accepts only an absent or all-zero panel
-  and is refused the moment any value is non-zero.
+  and is refused the moment any value is non-zero. Sodium is exempt from that
+  one check: it carries no energy, so table salt is a genuine 0 kcal record
+  with 38,758 mg of it. Its own ceiling still applies -- 100,000 mg, being
+  100 g of sodium per 100 g.
 
 STORAGE
   Everything added writes immediately under $XDG_CONFIG_HOME/pantry, or
