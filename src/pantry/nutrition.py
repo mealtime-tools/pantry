@@ -50,6 +50,17 @@ _SODIUM_ROW = re.compile(
     r"^\s*sodium\b:?\s*(?:less\s+than\s+)?[<\d]", re.IGNORECASE
 )
 
+# The same row, named rather than hunted for. A structured source states its
+# nutrient names, so the figure it must be followed by in pasted text -- the
+# thing that keeps "Sodium Bicarbonate (500)" out of a record -- is not needed
+# and would not be there to match.
+_SODIUM_NAME = re.compile(r"^\s*sodium\b[\s(]*(?:mg|g)?\)?\s*$", re.IGNORECASE)
+
+# A structured source often puts the unit in the row name -- "Sodium (mg)"
+# against a bare 400 -- which is the same figure stated a different way, not a
+# missing unit.
+_NAME_UNIT = re.compile(r"\(?\b(mg|g)\b\)?\s*$", re.IGNORECASE)
+
 # The rows this parser recognizes, in the order it tries them. First match
 # wins, so sodium leads: any other line naming it is skipped on the next rule,
 # which is what keeps "Sodium Bicarbonate (500)" out of the *carbs* row it
@@ -210,6 +221,39 @@ def _in_grams(key: str, chosen: tuple[float, str]) -> float:
         )
 
     return round(value / _MG_PER_G, 6) if unit == "mg" else value
+
+
+def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
+    """Read a panel whose rows a source already separated for us.
+
+    An API's nutrition table gives a name and a figure per row, so rendering
+    those back into label text only to hunt the name out of it again invents
+    an ambiguity that was never in the data: it is what lets an ingredient
+    list reach these patterns at all. Names are matched whole here, and the
+    figures come straight across.
+    """
+    panel: dict[str, float] = {}
+
+    for name, value in rows:
+        key = "sodium" if _SODIUM_NAME.match(name) else _row_key(name)
+        if key is None or key == "skip":
+            continue
+
+        found = [q for q in _quantities(value) if math.isfinite(q[0])]
+        if not found:
+            continue
+
+        if key == "kcal":
+            _read_energy(panel, found, first=False)
+            continue
+
+        figure, unit = found[0]
+        named = _NAME_UNIT.search(name)
+        panel[key] = _in_grams(
+            key, (figure, unit or (named.group(1).lower() if named else ""))
+        )
+
+    return panel
 
 
 def _read_energy(

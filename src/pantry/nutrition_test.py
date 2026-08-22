@@ -4,6 +4,7 @@ import pytest
 
 from pantry.nutrition import (
     NutritionError,
+    panel_from_rows,
     assert_usable_nutrients,
     nutrients_for_storage,
     parse_amount,
@@ -278,3 +279,63 @@ def test_a_nutrient_figure_without_a_unit_is_refused(line: str) -> None:
 
 def test_a_macro_needs_no_unit() -> None:
     assert parse_panel("Protein 8.5\nFat 3.6") == {"protein": 8.5, "fat": 3.6}
+
+
+COLES_ROWS = [
+    ("Energy", "980kJ"),
+    ("Protein", "8.5g"),
+    ("Fat, Total", "3.6g"),
+    ("- Saturated", "0.6g"),
+    ("Carbohydrate", "38.4g"),
+    ("- Sugars", "2.2g"),
+    ("Dietary Fibre", "4.1g"),
+    ("Sodium", "400mg"),
+]
+
+
+def test_structured_rows_read_a_whole_panel() -> None:
+    assert panel_from_rows(COLES_ROWS) == {
+        "kcal": 234.22588,
+        "kj": 980.0,
+        "protein": 8.5,
+        "fat": 3.6,
+        "carbs": 38.4,
+        "sugar": 2.2,
+        "fiber": 4.1,
+        "sodium": 0.4,
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [("Sodium", "400mg"), ("Sodium (mg)", "400"), ("Sodium mg", "400")],
+    ids=["unit-on-figure", "unit-in-name", "bare-unit-in-name"],
+)
+def test_a_structured_row_takes_its_unit_from_wherever_it_is_stated(
+    name: str, value: str
+) -> None:
+    """The unit is information the source handed over; using it beats guessing.
+
+    A pasted label can only put the unit beside the figure. A structured row
+    can put it in either place, and "Sodium (g) 0.4" read as milligrams is
+    wrong by a thousand.
+    """
+    assert panel_from_rows([(name, value)]) == {"sodium": 0.4}
+    assert panel_from_rows([("Sodium (g)", "0.4")]) == {"sodium": 0.4}
+
+
+def test_a_structured_row_with_no_unit_anywhere_is_refused() -> None:
+    with pytest.raises(NutritionError, match="with no unit"):
+        panel_from_rows([("Sodium", "400")])
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Sodium Bicarbonate", "Ingredients", "Salt", "Sodium (as salt)"],
+    ids=["additive", "ingredient-list", "salt", "salt-restated"],
+)
+def test_a_structured_row_that_names_no_nutrient_is_not_read(
+    name: str,
+) -> None:
+    """Nothing here has to be told apart from prose: the source named it."""
+    assert panel_from_rows([(name, "500")]) == {}
