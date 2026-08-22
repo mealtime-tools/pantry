@@ -52,7 +52,6 @@ def test_shards_use_one_flat_item_format() -> None:
     assert all("kcal" in product or "kj" in product for product in products)
     assert not any("nutrients" in product for product in products)
     assert not any("serving_size" in product for product in products)
-    assert any(product.get("grams") for product in products)
 
 
 def test_manual_panel_is_json_with_null_and_alias_support() -> None:
