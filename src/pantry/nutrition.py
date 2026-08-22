@@ -43,10 +43,22 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("sugar", re.compile(r"sugar", re.IGNORECASE)),
     ("fiber", re.compile(r"fib(?:re|er)", re.IGNORECASE)),
     # Read, unlike the salt row above it: salt is 2.5 times its sodium, so
-    # taking one for the other would overstate the figure by 150 percent. The
-    # word boundary keeps an ingredient list's "monosodium glutamate" from
-    # being read as the panel row.
-    ("sodium", re.compile(r"\bsodium\b", re.IGNORECASE)),
+    # taking one for the other would overstate the figure by 150 percent.
+    #
+    # Matched at the head of the line and only as far as its own figure,
+    # because an additive names sodium too -- "Sodium Bicarbonate (500)",
+    # "Sodium Nitrite (250)" -- and those codes sit inside sodium's plausible
+    # milligram range. A figure taken off an ingredient list would pass every
+    # later check, and the last matching line is the one that wins. Sugar
+    # survives the same contamination only because the 100 g ceiling refuses
+    # it. A row this does not recognize is absent, which is the safe answer.
+    (
+        "sodium",
+        re.compile(
+            r"^\s*sodium\b[\s(,:]*(?:mg|g|na)?[\s),:]*[<\d]",
+            re.IGNORECASE,
+        ),
+    ),
     ("protein", re.compile(r"protein", re.IGNORECASE)),
     ("carbs", re.compile(r"carb", re.IGNORECASE)),
     ("fat", re.compile(r"fat", re.IGNORECASE)),
@@ -225,6 +237,29 @@ def _check_mass(panel: dict[str, Any], key: str) -> None:
         )
 
 
+def assert_usable_sodium(panel: dict[str, Any]) -> None:
+    """Refuse a sodium figure that cannot be milligrams per 100 g.
+
+    Its own function, not part of `_check_mass`, because sodium is the one
+    figure stored in milligrams -- and because the two zero-energy paths
+    return before the full panel rules run, and sodium is the only nutrient
+    they carry through.
+    """
+    sodium = panel.get("sodium")
+    if sodium is None:
+        return
+
+    if not math.isfinite(sodium) or sodium < 0:
+        raise NutritionError(
+            f"nutrition panel has an impossible sodium: {sodium}"
+        )
+
+    if sodium > _MAX_SODIUM_MG:
+        raise NutritionError(
+            f"nutrition panel holds {sodium} mg of sodium per 100 g"
+        )
+
+
 def assert_usable_nutrients(panel: dict[str, Any]) -> None:
     """Refuse a panel that is not worth storing.
 
@@ -249,13 +284,7 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
         if panel.get(key) is not None:
             _check_mass(panel, key)
 
-    # Sodium is milligrams, so the same "no more than 100 g per 100 g" rule
-    # needs its own bound rather than `_check_mass`.
-    sodium = panel.get("sodium")
-    if sodium is not None and sodium > _MAX_SODIUM_MG:
-        raise NutritionError(
-            f"nutrition panel holds {sodium} mg of sodium per 100 g"
-        )
+    assert_usable_sodium(panel)
 
     # Catches the two mistakes a per-100 g figure cannot survive: a
     # per-serving column read by mistake, and a milligram figure landing in a
@@ -268,15 +297,13 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
 
 
 def _conflicts_with_zero(key: str, value: float | None) -> bool:
-    """Whether one printed figure contradicts a zero-calorie declaration."""
-    if value is None:
-        return False
-    if not math.isfinite(value):
-        return True
+    """Whether one printed figure contradicts a zero-calorie declaration.
 
-    # Sodium carries no energy, so a figure for it contradicts nothing: table
-    # salt is a genuine zero-calorie product with 38,758 mg of it.
-    return value != 0 and key != "sodium"
+    Sodium carries no energy, so a figure for it contradicts nothing: table
+    salt is a genuine zero-calorie product with 38,758 mg of it.
+    `assert_usable_sodium` is what checks it instead.
+    """
+    return value is not None and value != 0 and key != "sodium"
 
 
 def nutrients_for_storage(
@@ -294,6 +321,10 @@ def nutrients_for_storage(
             raise NutritionError(
                 f"--zero-calorie conflicts with nutrition panel {key}: {value}"
             )
+
+    # Reached before the sodium is carried through, because this path returns
+    # without running the rules that would otherwise have checked it.
+    assert_usable_sodium(panel)
 
     zeroed: dict[str, float] = {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0}
     if panel.get("sodium") is not None:

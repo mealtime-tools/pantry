@@ -75,6 +75,27 @@ def test_sodium_is_converted_from_the_grams_the_index_publishes(tmp_path):
     assert hit["nutrients"]["sodium"] == 36
 
 
+def test_a_trace_sodium_figure_survives_the_conversion(tmp_path) -> None:
+    trace = {
+        "hits": [
+            {
+                **HIT["hits"][0],
+                "nutriments": {
+                    "energy-kcal_100g": 1,
+                    "sodium_100g": 0.00003,
+                },
+            }
+        ]
+    }
+    off = OpenFoodFacts(tmp_path / "off", get=lambda url: json.dumps(trace))
+
+    hit = off.search("trace", limit=1)[0]
+
+    # Rounding before scaling would quantise 0.00003 g to nothing at all,
+    # which is what makes the order of the two operations load-bearing.
+    assert hit["nutrients"]["sodium"] == 0.03
+
+
 def test_the_requested_page_size_is_clamped_not_passed_through(tmp_path):
     """A limit of zero costs no request, and a huge one asks for 100 rows."""
     calls: list[str] = []

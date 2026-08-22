@@ -15,7 +15,7 @@ from typing import Any
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
-from pantry.nutrition import assert_usable_nutrients
+from pantry.nutrition import assert_usable_nutrients, assert_usable_sodium
 
 # The data owners. `localstore` is deliberately absent: it is a storage
 # layer, and
@@ -191,6 +191,10 @@ def assert_exportable_product(product: Product) -> None:
                     f"{_label(product)} has zero energy but "
                     f"non-zero {key}: {value}"
                 )
+
+        # The panel rules below are skipped on this path, so the one figure it
+        # does carry is checked on its own.
+        assert_usable_sodium(product)
         return
 
     assert_usable_nutrients(product)

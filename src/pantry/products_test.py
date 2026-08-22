@@ -5,8 +5,10 @@ import hashlib
 import pytest
 
 from pantry.data import data_dir
+from pantry.nutrition import NutritionError
 from pantry.products import (
     ProductError,
+    assert_exportable_product,
     assert_product_record,
     format_jsonl,
     parse_jsonl,
@@ -111,3 +113,31 @@ def test_a_record_with_no_sodium_stays_without_one() -> None:
 def test_an_unusable_sodium_is_refused_rather_than_dropped(value) -> None:
     with pytest.raises(ProductError, match="sodium"):
         assert_product_record({**STOCK_CUBE, "sodium": value})
+
+
+# Table salt: the record shape the zero-energy rules have to allow, and the
+# one the AFCD shard already ships two of without a sodium figure.
+TABLE_SALT = {
+    "source": "manual",
+    "id": "table-salt",
+    "name": "Table Salt",
+    "brand": "Example",
+    "kcal": 0,
+    "protein": 0,
+    "fat": 0,
+    "carbs": 0,
+    "sodium": 38758.0,
+}
+
+
+def test_a_zero_energy_record_may_still_carry_sodium() -> None:
+    # Sodium carries no energy, so it is the one figure the zero-energy
+    # consistency check must not treat as a contradiction.
+    assert_exportable_product(TABLE_SALT)
+
+
+def test_a_zero_energy_record_still_has_its_sodium_checked() -> None:
+    # This branch returns before the panel rules run, so the ceiling that
+    # refuses more than 100 g of anything per 100 g is applied here too.
+    with pytest.raises(NutritionError, match="sodium"):
+        assert_exportable_product({**TABLE_SALT, "sodium": 500_000})

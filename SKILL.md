@@ -86,13 +86,15 @@ NAME` restricts to one provider and repeats; `--limit` applies per provider;
 `sources` names the providers that answered, so a silently skipped one is
 visible. Do this before anything remote, every time.
 
-Each result is `{"id","name","title","nutrients":{kcal,protein,fat,carbs,fiber,
-sugar},"serving":{"size","unit"},"url","source"}`, plus `basis` and
-`basis_note` when the record carries them. `nutrients` always carries all six
-keys, missing ones as 0, and carries `sodium` in mg as a seventh only when the
-record holds one — a defaulted 0 there would read as sodium-free rather than
-unknown. `serving` may be `{}`, and `url` is absent when the record has none.
-This is a search-result shape, not a stored record.
+Each result is `{"id","name","title","nutrients":{kcal,protein,fat,carbs,
+fiber,sugar,sodium},"serving":{"size","unit"},"url","source"}`, plus `basis`
+and `basis_note` when the record carries them. A `local` result always carries
+the first six nutrient keys, missing ones as 0; an `openfoodfacts` result
+carries only the keys the index published, so read `nutrients` with `.get`.
+`sodium` is in mg and is present in either only when the source has a figure —
+a defaulted 0 there would read as sodium-free rather than unknown. `serving`
+may be `{}`, and `url` is absent when the record has none. This is a
+search-result shape, not a stored record.
 
 ## Exact lookup
 
