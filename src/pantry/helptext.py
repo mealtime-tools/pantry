@@ -101,7 +101,9 @@ ADD ONE RECORD
 
   A row printed in milligrams is converted to the grams a record holds, so
   "Sodium 400mg" and "Sodium 0.4g" both store 0.4, and a trace bound such as
-  "LESS THAN 5mg" stores the bound. A Salt row is not read at all: salt is 2.5
+  "LESS THAN 5mg" stores the bound. Any nutrient beyond the four macros must
+  state its unit: the macros are only ever printed in grams, but "Sodium 355"
+  is a guess between two answers 1000 times apart, so it is refused. A Salt row is not read at all: salt is 2.5
   times its sodium, and reading one as the other would overstate it by 150
   percent.
 

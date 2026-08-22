@@ -186,18 +186,30 @@ def parse_panel(text: str) -> dict[str, float]:
         if not chosen:
             continue
 
-        # A mineral row is printed in milligrams and a record holds grams, so
-        # "Sodium 400mg" and "Sodium 0.4g" land on the same figure. Keyed on
-        # the unit the label wrote rather than on which row it is, because the
-        # unit is the only thing that decides. Rounded because dividing leaves
-        # binary-float noise that would be written into the record verbatim.
-        value, unit = chosen
-        if unit == "mg":
-            value = round(value / _MG_PER_G, 6)
-
-        panel[key] = value
+        panel[key] = _in_grams(key, chosen)
 
     return panel
+
+
+def _in_grams(key: str, chosen: tuple[float, str]) -> float:
+    """One row's figure as the grams a record stores.
+
+    A macro is only ever printed in grams, so a bare "Protein 8.5" is not
+    ambiguous. Every other nutrient is printed in whichever unit keeps it
+    legible -- sodium in milligrams, the same figure in grams a thousandth of
+    the size -- so a bare number there is a guess between two answers that
+    differ by 1000x, and refusing beats guessing. Rounded because dividing
+    leaves binary-float noise that would be written to the record verbatim.
+    """
+    value, unit = chosen
+
+    if key in NUTRIENTS and not unit:
+        raise NutritionError(
+            f"nutrition panel states {key} with no unit: write"
+            f" {value:g}g or {value:g}mg"
+        )
+
+    return round(value / _MG_PER_G, 6) if unit == "mg" else value
 
 
 def _read_energy(
