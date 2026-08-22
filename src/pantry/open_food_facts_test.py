@@ -21,6 +21,7 @@ HIT = {
                 "proteins_100g": 10.3,
                 "fat_100g": 0.4,
                 "carbohydrates_100g": 3.6,
+                "sodium_100g": 0.036,
             },
         },
         {"code": "", "product_name": "Unidentifiable"},
@@ -61,6 +62,38 @@ def test_a_successful_search_is_reused_for_a_day_then_refetched(tmp_path):
     clock["now"] += 2 * 60 * 60
     off.search("greek yogurt", limit=5)
     assert len(calls) == 2
+
+
+def test_sodium_is_converted_from_the_grams_the_index_publishes(tmp_path):
+    off = OpenFoodFacts(tmp_path / "off", get=lambda url: json.dumps(HIT))
+
+    hit = off.search("greek yogurt", limit=1)[0]
+
+    # The index publishes sodium in grams and a record stores milligrams, so
+    # 0.036 g is 36 mg: passing it straight through would under-report by a
+    # thousand.
+    assert hit["nutrients"]["sodium"] == 36
+
+
+def test_a_trace_sodium_figure_survives_the_conversion(tmp_path) -> None:
+    trace = {
+        "hits": [
+            {
+                **HIT["hits"][0],
+                "nutriments": {
+                    "energy-kcal_100g": 1,
+                    "sodium_100g": 0.00003,
+                },
+            }
+        ]
+    }
+    off = OpenFoodFacts(tmp_path / "off", get=lambda url: json.dumps(trace))
+
+    hit = off.search("trace", limit=1)[0]
+
+    # Rounding before scaling would quantise 0.00003 g to nothing at all,
+    # which is what makes the order of the two operations load-bearing.
+    assert hit["nutrients"]["sodium"] == 0.03
 
 
 def test_the_requested_page_size_is_clamped_not_passed_through(tmp_path):

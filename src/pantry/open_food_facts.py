@@ -21,6 +21,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from pantry.nutrition import MG_PER_G
 from pantry.store import write_atomic
 
 SEARCH_URL = "https://search.openfoodfacts.org/search"
@@ -45,8 +46,12 @@ def cache_dir(
     return base / "pantry" / "open-food-facts"
 
 
-def _number(value: Any) -> float | None:
-    """Keep only finite, non-negative nutrient values the source supplied."""
+def _number(value: Any, scale: float = 1) -> float | None:
+    """Keep only finite, non-negative nutrient values the source supplied.
+
+    The scale is applied before rounding, so a figure in another unit is not
+    quantised down to nothing on the way in.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         return None
     try:
@@ -55,7 +60,7 @@ def _number(value: Any) -> float | None:
         return None
     if not math.isfinite(parsed) or parsed < 0:
         return None
-    return round(parsed, 4)
+    return round(parsed * scale, 4)
 
 
 def _nutrients(values: Any) -> dict[str, float]:
@@ -68,6 +73,8 @@ def _nutrients(values: Any) -> dict[str, float]:
         "carbs": _number(source.get("carbohydrates_100g")),
         "fiber": _number(source.get("fiber_100g")),
         "sugar": _number(source.get("sugars_100g")),
+        # The index publishes sodium in grams; a record stores milligrams.
+        "sodium": _number(source.get("sodium_100g"), MG_PER_G),
     }
     return {k: v for k, v in mapped.items() if v is not None}
 

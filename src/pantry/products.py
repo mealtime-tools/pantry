@@ -3,6 +3,10 @@
 Nutrients are per 100 g, everywhere, always. A consumer scales by
 `grams / 100` at the point of display; storing a pre-scaled value would make
 editing an amount wrong in a way no test would catch.
+
+Every nutrient is grams except `sodium`, which is milligrams: it is the unit
+every nutrition panel prints that row in, so the common case needs no
+conversion at all.
 """
 
 import json
@@ -11,7 +15,7 @@ from typing import Any
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
-from pantry.nutrition import assert_usable_nutrients
+from pantry.nutrition import MG_PER_G, assert_usable_nutrients
 
 # The data owners. `localstore` is deliberately absent: it is a storage
 # layer, and
@@ -47,6 +51,9 @@ PRODUCT_KEYS = (
     "protein",
     "fiber",
     "sugar",
+    # Milligrams, not grams. The only key whose unit differs from its
+    # neighbours, because the label it is read off is written that way.
+    "sodium",
     "kcal",
     # The basis sits with the figures it qualifies rather than with the
     # packaging fields, so a line read by eye carries the caveat beside the
@@ -64,6 +71,11 @@ Product = dict[str, Any]
 
 _REQUIRED_NUMBERS = ("kcal", "protein", "fat", "carbs")
 _OPTIONAL_NUMBERS = ("kj", "fiber", "sugar", "serving_size", "total_size")
+
+# 100 g of sodium per 100 g, in the milligrams sodium is stored in. The
+# nutrition rules cap every other figure at 100 g, and pure table salt is only
+# 38,758 mg, so nothing edible comes near this.
+_MAX_SODIUM_MG = 100 * MG_PER_G
 
 
 class ProductError(ValueError):
@@ -93,8 +105,10 @@ def assert_identity(product: Product) -> None:
             raise ProductError(f"product needs a {key}")
 
 
-def _check_number(product: Product, key: str, optional: bool) -> None:
-    """Reject a figure that is absent, not a number, or negative."""
+def _check_number(
+    product: Product, key: str, optional: bool, maximum: float | None = None
+) -> None:
+    """Reject a figure that is absent, not a number, negative, or too big."""
     value = product.get(key)
     if value is None:
         if optional:
@@ -104,40 +118,24 @@ def _check_number(product: Product, key: str, optional: bool) -> None:
     numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
     if not numeric or not math.isfinite(value) or value < 0:
         raise ProductError(f"{_label(product)} has invalid {key}: {value}")
+    if maximum is not None and value > maximum:
+        raise ProductError(f"{_label(product)} has implausible {key}: {value}")
 
 
-def _check_basis_value(product: Product) -> None:
+def _check_basis(product: Product) -> None:
     """Refuse a basis this format does not define.
 
     Coerced or ignored, an unknown value reads as "no caveat" — which is
-    exactly the silent scaling error the key exists to make visible. This is
-    the one rule strict enough to enforce when a record is merely read.
+    exactly the silent scaling error the key exists to make visible. The one
+    rule strict enough to run when a record is merely read, and the only thing
+    checked about the pair: `basis_note` is free text, and a note a reader can
+    see is not worth failing the shard it sits in.
     """
     basis = product.get("basis")
     if basis is not None and basis not in PRODUCT_BASES:
         raise ProductError(
             f"{_label(product)} has unsupported basis: {basis!r}"
         )
-
-
-def _check_basis(product: Product) -> None:
-    """Refuse a basis, or a note, this format does not define."""
-    _check_basis_value(product)
-
-    note = product.get("basis_note")
-    if note is None:
-        return
-
-    if not isinstance(note, str) or not note.strip():
-        raise ProductError(
-            f"{_label(product)} has an unusable basis_note: {note!r}"
-        )
-
-    # A note without a flag is the worst of both: the record structurally
-    # claims as-sold while its own text says otherwise, so a consumer keyed on
-    # `basis` scales by a dry weight with the conversion sitting beside it.
-    if product.get("basis") is None:
-        raise ProductError(f"{_label(product)} has a basis_note but no basis")
 
 
 def _label(product: Product) -> str:
@@ -158,6 +156,11 @@ def assert_product_record(product: Product) -> None:
     for key in _OPTIONAL_NUMBERS:
         _check_number(product, key, optional=True)
 
+    # Checked here rather than with the panel rules because both zero-energy
+    # paths return before those run, and sodium is the only figure they carry
+    # through. Every path that authors one reaches this function.
+    _check_number(product, "sodium", optional=True, maximum=_MAX_SODIUM_MG)
+
     _check_basis(product)
 
 
@@ -167,6 +170,8 @@ def assert_exportable_product(product: Product) -> None:
 
     # A confirmed zero-calorie record is the one shape the nutrition rules
     # cannot express, so it is checked for internal consistency instead.
+    # Sodium is absent from the list below on purpose: it carries no energy,
+    # so table salt is a genuine 0 kcal record with 38,758 mg of it.
     if product.get("kcal") == 0:
         for key in ("kj", "protein", "fat", "carbs", "fiber", "sugar"):
             value = product.get(key)
@@ -244,16 +249,12 @@ def parse_jsonl(
                 parsed = {"source": source, **parsed}
             assert_identity(parsed)
 
-            # The value, and nothing else about the basis. An unrecognised
-            # one reads as "absent", and absent means as-sold, so the record
-            # would silently lose the warning it was written to carry. The
-            # note rules stay on the write path deliberately: an empty note,
-            # or one with no basis, is already visible in `lookup` and
-            # `search` output, and refusing a whole shard over a mistake a
-            # reader can see would take every other row down with it — this
-            # command included, since finding one record means reading them
-            # all.
-            _check_basis_value(parsed)
+            # The one key checked on the way in: an unrecognised basis reads
+            # as "absent", and absent means as-sold, so the record would
+            # silently lose the warning it was written to carry. Nothing else
+            # is, because a whole shard failing over one row would take every
+            # other record down with it.
+            _check_basis(parsed)
         except (ValueError, AttributeError) as cause:
             raise ProductError(
                 f"{label}: line {number} is invalid: {cause}"

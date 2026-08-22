@@ -29,12 +29,15 @@ TIMEOUT_S = 30
 # of records that carry only the SI figure.
 KCAL_ID = 1008
 KJ_ID = 1062
-MACRO_IDS = {
+# Sodium is published in milligrams per 100 g, which is already the unit the
+# record stores it in, so it is carried like any other figure.
+NUTRIENT_IDS = {
     1003: "protein",
     1004: "fat",
     1005: "carbs",
     1079: "fiber",
     2000: "sugar",
+    1093: "sodium",
 }
 
 KCAL_PER_KJ = 1 / 4.184
@@ -84,7 +87,7 @@ def _brand(food: dict[str, Any]) -> str:
 def to_product(food: dict[str, Any]) -> Product:
     """Turn one FoodData Central food into a Pantry record.
 
-    Every macro the record publishes is carried; every one it omits stays
+    Every nutrient the record publishes is carried; every one it omits stays
     omitted. `assert_exportable_product` decides whether what is left is
     enough, so a partial USDA record is refused at storage rather than
     completed with zeros here.
@@ -109,7 +112,7 @@ def to_product(food: dict[str, Any]) -> Product:
             f"#/food-details/{identifier}/nutrients"
         ),
     }
-    for nutrient_id, field in MACRO_IDS.items():
+    for nutrient_id, field in NUTRIENT_IDS.items():
         if nutrient_id in amounts:
             product[field] = amounts[nutrient_id]
 

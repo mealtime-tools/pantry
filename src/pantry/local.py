@@ -50,14 +50,22 @@ def as_result(product: Product) -> dict:
         if product.get(full) is not None
     }
 
+    nutrients = {
+        key: product.get(key) or 0
+        for key in ("kcal", "protein", "fat", "carbs", "fiber", "sugar")
+    }
+
+    # Sodium is milligrams, and it is the one nutrient most records predate: a
+    # defaulted 0 would read as a sodium-free product rather than an unknown
+    # one, so it is carried only when the record holds it.
+    if product.get("sodium") is not None:
+        nutrients["sodium"] = product["sodium"]
+
     result = {
         "id": product.get("id"),
         "name": name,
         "title": f"{name} ({brand})" if brand else name,
-        "nutrients": {
-            key: product.get(key) or 0
-            for key in ("kcal", "protein", "fat", "carbs", "fiber", "sugar")
-        },
+        "nutrients": nutrients,
         "serving": serving,
     }
     # Beside the nutrients, for the same reason they are stored together: a

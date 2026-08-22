@@ -3,11 +3,10 @@
 GUIDE = """
 pantry — food product records, per 100 g, always.
 
-FOUR VERBS
+THREE VERBS
   search <query>          every enabled provider; local unless --remote
   lookup <src> <id>       exact identity, local only, never a request
   add <ref>               acquire one record and store it
-  annotate <src> <id>     set the basis of a record already held
 
 IDENTITY
   A product is the pair (source, id). Sources are coles, woolworths, afcd,
@@ -19,16 +18,20 @@ NUTRIENTS
   Every figure in every record is per 100 g. Scale by grams / 100 at the point
   of display. Never store a pre-scaled value.
 
+  Every figure is grams except sodium, which is milligrams per 100 g: the unit
+  its label row prints, so the common case needs no conversion. An absent
+  sodium is unknown, never zero -- the frozen shards predate the key.
+
   Per 100 g as sold, unless the record carries `basis`: as_sold or
   as_prepared, absent meaning as_sold. An as_prepared panel was printed for
   the made-up food, so scaling it by a dry weight is wrong by whatever the
   preparation adds -- 47x for a stock cube. Read `basis_note` for the
   conversion instead ("per 100 mL prepared; 1 cube (10.5 g) makes 500 mL").
   Both are shown by search and lookup when present. A basis that is neither
-  value, an empty note, and a note with no basis are all refused on the way
-  out. Only the basis value is checked on the way in, because an unrecognised
-  one reads as absent and absent means as-sold; the other two are visible in
-  output, and one bad row must never cost the shard it sits in.
+  value is refused, on the way out and on the way in alike: an unrecognised
+  one reads as absent and absent means as-sold, which is the silent error the
+  key exists to prevent. The note is free text and nothing else about the pair
+  is checked, because one bad row must never cost the shard it sits in.
 
 PROVIDERS
   local          the frozen shards plus your own. Search. No network.
@@ -94,37 +97,32 @@ ADD ONE RECORD
   and would let your own entry for the same barcode overwrite it. It is
   community data, not proof of current availability.
 
+  A Sodium row is read in milligrams, converting a gram figure such as
+  "Sodium 0.4g" to 400 and storing a trace bound such as "LESS THAN 5mg" as
+  the bound. A Salt row is not read at all: salt is 2.5 times its sodium, and
+  reading one as the other would overstate it by 150 percent.
+
+  To be read, the row must open its line and be followed by its figure. That
+  rules out an additive -- "Sodium Bicarbonate (500)", whose code looks like a
+  plausible milligram figure -- and with it "Sodium (as salt)", "Sodium (g)
+  0.4" (only a unit on the figure can be converted) and a row wrapped in
+  markup. A declined row is absent from the record rather than guessed at, and
+  nothing warns about it.
+
   --manual reads the panel from stdin and never touches the network; with a
   retailer url it keeps that identity, so a blocked page is a redirection and
   not a dead end. Two-column labels are handled: the per-100 g column wins,
   which is the last column unless the header names "per 100 g" first. When
   that column is computed on added water, say so with --basis as_prepared and
   --basis-note; --basis-note needs --basis, and both need --manual, because no
-  page or API declares a basis. For a record already held, use `annotate`
-  instead: --manual re-authors the record from the panel you paste, which is
-  how a wrong field is removed and also how a pack size gets lost.
+  page or API declares a basis.
 
-  basis and basis_note survive --refresh. Every other field is re-read from
-  the source; these two came from a human and no provider can put them back.
-
-ANNOTATE A HELD RECORD
-  pantry annotate coles 98548 --basis as_prepared \
-    --basis-note "per 100 mL prepared; 1 cube (10.5 g) makes 500 mL"
-
-  Sets the basis of a record already held, in place and offline, keeping every
-  other field as it was. --basis is required; an absent --basis-note leaves
-  whatever the record carried. Emits {"annotated":true,"source":...,"id":...,
-  "product":{...}}. An identity that is not held is a refusal, not a fetch.
-
-  --clear-basis-note drops the note a record carries, and is the only way to
-  remove one. Changing the basis of a record that has a note is refused
-  unless one of the two is passed with it: a note explains figures on one
-  basis, so `as_sold` beside "per 100 mL prepared" is worse than no note.
-
-  Unlike add, this checks shape and not plausibility, because it re-measures
-  nothing: a record whose panel today's rules would refuse -- 141 frozen
-  Coles rows, mostly dry goods -- can still be annotated. Warning about one
-  must not require changing its figures.
+  Adding a record that is already held keeps every field the new reading does
+  not state, --manual and --refresh alike. That is how a held record gets a
+  basis: re-add it with --basis, and its pack size, url and unmentioned rows
+  survive. It is also why no provider can drop a basis a human supplied. The
+  cost is that nothing removes a field -- correcting one means restating it,
+  and an empty --basis-note is the only blanking there is.
 
 WHAT A RETAILER PAGE COSTS
   The page budget defaults to 4 (--budget N). It is claimed before the request
@@ -143,7 +141,10 @@ NEVER INFER ZEROS
   A missing, malformed or unreadable nutrition value is refused, not coerced.
   An inferred zero silently under-counts every recipe downstream. The one
   exception is --zero-calorie, which accepts only an absent or all-zero panel
-  and is refused the moment any value is non-zero.
+  and is refused the moment any value is non-zero. Sodium is exempt from that
+  one check: it carries no energy, so table salt is a genuine 0 kcal record
+  with 38,758 mg of it. Its own ceiling still applies -- 100,000 mg, being
+  100 g of sodium per 100 g.
 
 STORAGE
   Everything added writes immediately under $XDG_CONFIG_HOME/pantry, or

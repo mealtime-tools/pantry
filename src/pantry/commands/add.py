@@ -29,10 +29,6 @@ from pantry.providers.retailer import DEFAULT_PAGE_BUDGET
 from pantry.session import Deps, deps, guard, wants_json
 from pantry.sites import build_record
 
-# What a refresh carries across rather than re-reading. See
-# `_carry_annotations`.
-_CARRIED = ("basis", "basis_note")
-
 
 def _human(payload: dict) -> list[str]:
     """Notes are deliberately absent: the caller echoes them either way."""
@@ -74,19 +70,16 @@ def _payload(
     }
 
 
-def _carry_annotations(held: Product, product: Product) -> Product:
-    """Keep the fields no provider can ever re-supply.
+def _preserved(held: Product | None, product: Product) -> Product:
+    """Keep the fields a held record carries and a new reading does not state.
 
-    Every other field is source-derived, so a refresh re-reads it. These two
-    come from nowhere but a human reading the pack, which means a refresh that
-    dropped them would turn a visible warning back into a silent 47x error.
+    `add` rebuilds a record from whatever it was given, which on its own drops
+    every field the new source is silent about — including the pack size a
+    `basis_note` conversion is written against, and the basis itself, which no
+    provider can ever re-supply. There is deliberately no way to remove a
+    field: correcting one means restating it.
     """
-    carried = {
-        key: held[key]
-        for key in _CARRIED
-        if held.get(key) is not None and product.get(key) is None
-    }
-    return {**product, **carried} if carried else product
+    return {**held, **product} if held else product
 
 
 def _changed_fields(before: Product, after: Product) -> list[str]:
@@ -190,10 +183,7 @@ def add(
         # Nothing on a retailer page or in an API response declares a basis,
         # so accepting one there would store a claim no source made.
         if (basis is not None or basis_note is not None) and not manual:
-            raise UsageError(
-                "--basis and --basis-note need --manual; "
-                "use `pantry annotate` for a record already held"
-            )
+            raise UsageError("--basis and --basis-note need --manual")
         if basis_note is not None and basis is None:
             raise UsageError("--basis-note needs --basis")
 
@@ -212,6 +202,8 @@ def add(
                 basis_note=basis_note,
                 zero_calorie=zero_calorie,
             )
+            held = state.store.find(product["source"], product["id"])
+            product = _preserved(held, product)
             state.store.add(product)
             _emit(_payload(True, "stored", product), json_output)
             return
@@ -258,9 +250,7 @@ def _acquire(
 ) -> None:
     """Spend the request, then persist the moment the answer parses."""
     try:
-        product = provider.acquire(reference, options)
-        if held:
-            product = _carry_annotations(held, product)
+        product = _preserved(held, provider.acquire(reference, options))
         changes = _changed_fields(held, product) if held else []
 
         # A refresh that changed nothing leaves the localstore alone,
