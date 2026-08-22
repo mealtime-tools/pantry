@@ -225,6 +225,9 @@ def build_record(
         "kj": panel.get("kj"),
         "fiber": panel.get("fiber"),
         "sugar": panel.get("sugar"),
+        # Milligrams, as the panel printed it; every figure beside it is
+        # grams.
+        "sodium": panel.get("sodium"),
         # Absent unless a caller declares one: an unmarked record is as-sold.
         "basis": basis,
         "basis_note": basis_note,

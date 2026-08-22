@@ -18,6 +18,11 @@ by a dry weight. Read `basis_note`, which carries the conversion in free text
 that, and say which basis you used. Both keys appear in `search` and `lookup`
 output only when the record carries them.
 
+Every figure is grams except `sodium`, which is **milligrams per 100 g** — the
+unit its label row is printed in, and the one key whose unit differs from its
+neighbours. Never read it as grams, and never treat an absent `sodium` as zero:
+the frozen shards were written before the key existed and mostly lack it.
+
 Identity is the pair `(source, id)`. Sources are `coles`, `woolworths`, `afcd`,
 `usda`, `openfoodfacts`, `manual`. Ids are source-native
 strings compared exactly — leading zeros are significant, and no id carries a
@@ -84,8 +89,10 @@ visible. Do this before anything remote, every time.
 Each result is `{"id","name","title","nutrients":{kcal,protein,fat,carbs,fiber,
 sugar},"serving":{"size","unit"},"url","source"}`, plus `basis` and
 `basis_note` when the record carries them. `nutrients` always carries all six
-keys, missing ones as 0. `serving` may be `{}`, and `url` is absent when the
-record has none. This is a search-result shape, not a stored record.
+keys, missing ones as 0, and carries `sodium` in mg as a seventh only when the
+record holds one — a defaulted 0 there would read as sodium-free rather than
+unknown. `serving` may be `{}`, and `url` is absent when the record has none.
+This is a search-result shape, not a stored record.
 
 ## Exact lookup
 
@@ -160,6 +167,9 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   as `manual`: that would claim you read it off a label, and your own entry
   for the same barcode would silently overwrite it. Treat it as
   community-maintained data, not proof of current availability.
+- A `Sodium` row is read in the milligrams it prints; a gram figure such as
+  `Sodium 0.4g` becomes 400. A `Salt` row is **not** read, because salt is
+  2.5 times its sodium and reading one as the other would overstate it.
 - `--manual` reads the panel from stdin and never touches the network. It needs
   `--id` and `--name`; `--brand`, `--serving "59g"` and `--total "450g"` are
   optional. Given a retailer url it keeps that identity. Two-column labels are
@@ -230,16 +240,18 @@ to 0. An inferred zero silently under-counts every recipe downstream. Do not
 work around a refusal by supplying zeros.
 
 The one exception is `--zero-calorie`, which accepts only an absent or all-zero
-panel and is refused the moment any value is non-zero.
+panel and is refused the moment any value is non-zero. `sodium` is exempt from
+that check alone: it carries no energy, so table salt is a genuine 0 kcal
+record with 38,758 mg of it.
 
 A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of anything
-per 100 g, three macros totalling more than 105 g per 100 g, a `basis` that is
-neither `as_sold` nor `as_prepared`, an empty `basis_note`, or a `basis_note`
-with no `basis`. Only the first of those three applies when a record is
-**read**: an unrecognised basis would read as absent, and absent means
-as-sold, while the other two are visible in output. A shard is never failed
-over a mistake you can see in `lookup`.
+per 100 g (100,000 mg of sodium), three macros totalling more than 105 g per
+100 g, a `basis` that is neither `as_sold` nor `as_prepared`, an empty
+`basis_note`, or a `basis_note` with no `basis`. Only the first of those three
+basis rules applies when a record is **read**: an unrecognised basis would
+read as absent, and absent means as-sold, while the other two are visible in
+output. A shard is never failed over a mistake you can see in `lookup`.
 
 ## Storage
 

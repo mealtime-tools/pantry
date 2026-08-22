@@ -3,6 +3,10 @@
 Nutrients are per 100 g, everywhere, always. A consumer scales by
 `grams / 100` at the point of display; storing a pre-scaled value would make
 editing an amount wrong in a way no test would catch.
+
+Every nutrient is grams except `sodium`, which is milligrams: it is the unit
+every nutrition panel prints the row in, and the only one that keeps a trace
+figure legible.
 """
 
 import json
@@ -47,6 +51,9 @@ PRODUCT_KEYS = (
     "protein",
     "fiber",
     "sugar",
+    # Milligrams, not grams. The only key whose unit differs from its
+    # neighbours, because the label it is read off is written that way.
+    "sodium",
     "kcal",
     # The basis sits with the figures it qualifies rather than with the
     # packaging fields, so a line read by eye carries the caveat beside the
@@ -63,7 +70,14 @@ PRODUCT_KEYS = (
 Product = dict[str, Any]
 
 _REQUIRED_NUMBERS = ("kcal", "protein", "fat", "carbs")
-_OPTIONAL_NUMBERS = ("kj", "fiber", "sugar", "serving_size", "total_size")
+_OPTIONAL_NUMBERS = (
+    "kj",
+    "fiber",
+    "sugar",
+    "sodium",
+    "serving_size",
+    "total_size",
+)
 
 
 class ProductError(ValueError):
@@ -167,6 +181,8 @@ def assert_exportable_product(product: Product) -> None:
 
     # A confirmed zero-calorie record is the one shape the nutrition rules
     # cannot express, so it is checked for internal consistency instead.
+    # Sodium is absent from this list on purpose: it carries no energy, so
+    # table salt is a genuine 0 kcal record with 38,758 mg of it.
     if product.get("kcal") == 0:
         for key in ("kj", "protein", "fat", "carbs", "fiber", "sugar"):
             value = product.get(key)

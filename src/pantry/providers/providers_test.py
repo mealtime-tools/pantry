@@ -110,6 +110,22 @@ def test_search_is_local_until_remote_is_asked_for(make_deps, run) -> None:
     assert restricted["sources"] == ["openfoodfacts"]
 
 
+def test_a_search_result_carries_sodium_only_when_it_is_held(
+    make_deps, run
+) -> None:
+    salted = {**HELD, "id": "1048", "sodium": 400}
+    deps = make_deps([HELD, salted])
+
+    results = json.loads(run(deps, "--json", "search", "example bread").output)
+    nutrients = {r["id"]: r["nutrients"] for r in results["data"]["results"]}
+
+    # Milligrams, and absent rather than zero: the frozen shards predate the
+    # field, and a defaulted 0 would read as a sodium-free product instead of
+    # an unknown one.
+    assert nutrients["1048"]["sodium"] == 400
+    assert "sodium" not in nutrients["1047"]
+
+
 def test_lookup_never_reaches_the_network(make_deps, run) -> None:
     """The whole point of the command: an exact answer at no cost."""
     recorder = TransportRecorder(FakeTransport("plain", []))

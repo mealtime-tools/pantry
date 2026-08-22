@@ -12,6 +12,12 @@ from typing import Any
 
 _KJ_PER_KCAL = 0.239006
 
+_MG_PER_G = 1000
+
+# 100 g of sodium per 100 g, in the milligrams sodium is stored in. Pure table
+# salt is 38,758 mg, so nothing edible comes close to this.
+_MAX_SODIUM_MG = 100 * _MG_PER_G
+
 # No food exceeds pure fat, which is 900 kcal per 100 g.
 _MAX_KCAL_PER_100G = 900
 
@@ -29,13 +35,18 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "skip",
         re.compile(
-            r"saturat|trans|monounsat|polyunsat|sodium|salt"
+            r"saturat|trans|monounsat|polyunsat|salt"
             r"|cholesterol|potassium",
             re.IGNORECASE,
         ),
     ),
     ("sugar", re.compile(r"sugar", re.IGNORECASE)),
     ("fiber", re.compile(r"fib(?:re|er)", re.IGNORECASE)),
+    # Read, unlike the salt row above it: salt is 2.5 times its sodium, so
+    # taking one for the other would overstate the figure by 150 percent. The
+    # word boundary keeps an ingredient list's "monosodium glutamate" from
+    # being read as the panel row.
+    ("sodium", re.compile(r"\bsodium\b", re.IGNORECASE)),
     ("protein", re.compile(r"protein", re.IGNORECASE)),
     ("carbs", re.compile(r"carb", re.IGNORECASE)),
     ("fat", re.compile(r"fat", re.IGNORECASE)),
@@ -148,6 +159,10 @@ def parse_panel(text: str) -> dict[str, float]:
             _read_energy(panel, found, first)
             continue
 
+        if key == "sodium":
+            _read_sodium(panel, found, first)
+            continue
+
         chosen = _column(found, first)
         if chosen:
             panel[key] = chosen[0]
@@ -174,6 +189,25 @@ def _read_energy(
     panel["kcal"] = energy_to_kcal(value, unit)
     if unit == "kj":
         panel["kj"] = value
+
+
+def _read_sodium(
+    panel: dict[str, float], found: list[tuple[float, str]], first: bool
+) -> None:
+    """Sodium is the one row stored in milligrams, as its label prints it.
+
+    A gram figure is converted rather than refused, because a label writing
+    "Sodium 0.4g" means 400 mg and storing 0.4 would under-report it by a
+    thousand. No unit at all is the milligrams the row would have printed.
+    """
+    chosen = _column(found, first)
+    if not chosen:
+        return
+
+    value, unit = chosen
+    # Rounded because 0.4 * 1000 is 400.00000000000006 in binary floats, and
+    # that noise would be written into the record verbatim.
+    panel["sodium"] = round(value * _MG_PER_G, 4) if unit == "g" else value
 
 
 def _check_mass(panel: dict[str, Any], key: str) -> None:
@@ -215,6 +249,14 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
         if panel.get(key) is not None:
             _check_mass(panel, key)
 
+    # Sodium is milligrams, so the same "no more than 100 g per 100 g" rule
+    # needs its own bound rather than `_check_mass`.
+    sodium = panel.get("sodium")
+    if sodium is not None and sodium > _MAX_SODIUM_MG:
+        raise NutritionError(
+            f"nutrition panel holds {sodium} mg of sodium per 100 g"
+        )
+
     # Catches the two mistakes a per-100 g figure cannot survive: a
     # per-serving column read by mistake, and a milligram figure landing in a
     # gram field.
@@ -223,6 +265,18 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
         raise NutritionError(
             f"nutrition panel holds {mass:.1f} g of macros per 100 g"
         )
+
+
+def _conflicts_with_zero(key: str, value: float | None) -> bool:
+    """Whether one printed figure contradicts a zero-calorie declaration."""
+    if value is None:
+        return False
+    if not math.isfinite(value):
+        return True
+
+    # Sodium carries no energy, so a figure for it contradicts nothing: table
+    # salt is a genuine zero-calorie product with 38,758 mg of it.
+    return value != 0 and key != "sodium"
 
 
 def nutrients_for_storage(
@@ -236,9 +290,13 @@ def nutrients_for_storage(
     # A confirmation may fill an absent or all-zero panel, but never erase
     # nutrition that was actually printed.
     for key, value in panel.items():
-        if value is not None and (not math.isfinite(value) or value != 0):
+        if _conflicts_with_zero(key, value):
             raise NutritionError(
                 f"--zero-calorie conflicts with nutrition panel {key}: {value}"
             )
 
-    return {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0}
+    zeroed: dict[str, float] = {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0}
+    if panel.get("sodium") is not None:
+        zeroed["sodium"] = panel["sodium"]
+
+    return zeroed

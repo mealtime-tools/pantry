@@ -52,22 +52,27 @@ environment enables the USDA source; without one it is skipped silently.
 
 ### Record contract
 
-Nutrients are per 100 g. Consumers scale by `grams / 100`; Pantry never stores
-a pre-scaled nutrient. Identity is `(source, id)`, with source-native string
+Nutrients are per 100 g of the product **as sold**. Consumers scale by
+`grams / 100`; Pantry never stores a pre-scaled nutrient. Every figure is
+grams except `sodium`, which is **milligrams** per 100 g, the unit every
+nutrition panel prints that row in — the one key whose unit differs from its
+neighbours, so read it as mg and never as grams. Identity is `(source, id)`,
+with source-native string
 ids normalised at ingress. Pantry supports `coles`, `woolworths`, `afcd`,
 `usda`, `manual`, and `openfoodfacts`.
 Recipes deliberately accepts only its documented resolvable subset.
 
-Nutrients are per 100 g of the product **as sold** unless the record carries
-`basis`, which is `as_sold` or `as_prepared`. Absent means `as_sold`: the
-frozen shards predate the key and are never rewritten to carry a default, so a
-consumer that has never heard of it keeps today's behaviour. An `as_prepared`
-panel was printed for the made-up food, so scaling it by a dry weight is wrong
-by whatever the preparation adds — 47x for a stock cube. `basis_note` is the
-free text that says how to convert instead, such as "per 100 mL prepared;
-1 cube (10.5 g) makes 500 mL", and it needs a `basis` beside it: a note alone
-would leave the record structurally claiming as-sold. Both keys are surfaced
-by `lookup` and `search`, human output and `--json` alike.
+Two things a consumer must not guess at, then: the unit sodium is in, and what
+the figures were measured against. The as-sold basis holds unless the record
+carries `basis`, which is `as_sold` or `as_prepared`. Absent means `as_sold`:
+the frozen shards predate the key and are never rewritten to carry a default,
+so a consumer that has never heard of it keeps today's behaviour. An
+`as_prepared` panel was printed for the made-up food, so scaling it by a dry
+weight is wrong by whatever the preparation adds — 47x for a stock cube.
+`basis_note` is the free text that says how to convert instead, such as "per
+100 mL prepared; 1 cube (10.5 g) makes 500 mL", and it needs a `basis` beside
+it: a note alone would leave the record structurally claiming as-sold. Both
+keys are surfaced by `lookup` and `search`, human output and `--json` alike.
 
 An unrecognised `basis`, an empty `basis_note` and a note without a basis are
 all refused when a record is written. An unrecognised `basis` is refused when
@@ -88,11 +93,13 @@ JSONL keys have this fixed order, because a one-product edit must remain a
 one-line diff:
 
 ```
-source id name brand kj fat carbs protein fiber sugar kcal basis basis_note
-url serving_size serving_unit total_size total_unit
+source id name brand kj fat carbs protein fiber sugar sodium kcal basis
+basis_note url serving_size serving_unit total_size total_unit
 ```
 
-Optional missing keys are omitted. Unknown keys are preserved after known
+Optional missing keys are omitted. `sodium` is optional and never inferred: the
+frozen shards were written before the key existed and mostly lack it, so an
+absent sodium is unknown, not zero. Unknown keys are preserved after known
 ones. Every shard omits `source` because the filename supplies it, in the
 shipped data and the user's store alike. Records sort by source order, then
 id.
@@ -112,7 +119,9 @@ formatter is part of the record format, not presentation.
 `data/coles.jsonl` is an irreplaceable 10,297-row scrape with sha256
 `9d8eaa3b32f9775006e36710cfcf323a011c8a6b0aa48736db67d10d0bc8d7f6`.
 `data/afcd.jsonl` has 1,588 rows and sha256
-`53938eec2e627db56666df8abca04f6bc1dca844fb8decbfea32cfaa762d775a`.
+`53938eec2e627db56666df8abca04f6bc1dca844fb8decbfea32cfaa762d775a`. Neither
+carries `sodium`; backfilling the AFCD rows is its importer's job, not a
+migration.
 Tests pin the counts, checksums, and byte-for-byte re-serialization.
 
 One Coles row contains `0.00001`: Python normally writes `1e-05`, which is why

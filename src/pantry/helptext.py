@@ -30,6 +30,11 @@ NUTRIENTS
   one reads as absent and absent means as-sold; the other two are visible in
   output, and one bad row must never cost the shard it sits in.
 
+  Every figure is grams except sodium, which is milligrams per 100 g: the unit
+  its label row prints, and the one key whose unit differs from its
+  neighbours. An absent sodium is unknown, never zero -- the frozen shards
+  were written before the key existed.
+
 PROVIDERS
   local          the frozen shards plus your own. Search. No network.
   openfoodfacts  the public Search-a-licious index. Search and acquire by
@@ -94,6 +99,10 @@ ADD ONE RECORD
   and would let your own entry for the same barcode overwrite it. It is
   community data, not proof of current availability.
 
+  A Sodium row is read in milligrams, converting a gram figure such as
+  "Sodium 0.4g" to 400. A Salt row is not read at all: salt is 2.5 times its
+  sodium, and reading one as the other would overstate it by 150 percent.
+
   --manual reads the panel from stdin and never touches the network; with a
   retailer url it keeps that identity, so a blocked page is a redirection and
   not a dead end. Two-column labels are handled: the per-100 g column wins,
@@ -143,7 +152,9 @@ NEVER INFER ZEROS
   A missing, malformed or unreadable nutrition value is refused, not coerced.
   An inferred zero silently under-counts every recipe downstream. The one
   exception is --zero-calorie, which accepts only an absent or all-zero panel
-  and is refused the moment any value is non-zero.
+  and is refused the moment any value is non-zero. Sodium is exempt from that
+  one check: it carries no energy, so table salt is a genuine 0 kcal record
+  with 38,758 mg of it.
 
 STORAGE
   Everything added writes immediately under $XDG_CONFIG_HOME/pantry, or

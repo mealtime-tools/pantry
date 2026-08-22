@@ -30,6 +30,10 @@ _TTL_SECONDS = 24 * 60 * 60
 
 _AMOUNT = re.compile(r"(\d+(?:\.\d+)?)\s*(kg|ml|g|l)\b", re.IGNORECASE)
 
+# The index publishes `sodium_100g` in grams. A record stores milligrams, so
+# this is the one field that is not passed straight through.
+_MG_PER_G = 1000
+
 
 class RemoteFailure(Exception):
     """Open Food Facts could not answer. Never retried here."""
@@ -45,8 +49,12 @@ def cache_dir(
     return base / "pantry" / "open-food-facts"
 
 
-def _number(value: Any) -> float | None:
-    """Keep only finite, non-negative nutrient values the source supplied."""
+def _number(value: Any, scale: float = 1) -> float | None:
+    """Keep only finite, non-negative nutrient values the source supplied.
+
+    The scale is applied before rounding, so a figure in another unit is not
+    quantised down to nothing on the way in.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         return None
     try:
@@ -55,7 +63,7 @@ def _number(value: Any) -> float | None:
         return None
     if not math.isfinite(parsed) or parsed < 0:
         return None
-    return round(parsed, 4)
+    return round(parsed * scale, 4)
 
 
 def _nutrients(values: Any) -> dict[str, float]:
@@ -68,6 +76,7 @@ def _nutrients(values: Any) -> dict[str, float]:
         "carbs": _number(source.get("carbohydrates_100g")),
         "fiber": _number(source.get("fiber_100g")),
         "sugar": _number(source.get("sugars_100g")),
+        "sodium": _number(source.get("sodium_100g"), _MG_PER_G),
     }
     return {k: v for k, v in mapped.items() if v is not None}
 

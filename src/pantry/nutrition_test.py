@@ -20,6 +20,16 @@ Carbohydrate 23.1g      39.2g
 - Sugars     1.1g       1.9g
 """
 
+# The row FSANZ requires on every panel, in the milligrams it is printed in.
+SODIUM_LABEL = """
+             Per serve  Per 100g
+Energy       590kJ      1000kJ
+Protein      5.6g       9.5g
+Fat, Total   2.0g       3.4g
+Carbohydrate 39.2g      39.2g
+Sodium       145mg      355mg
+"""
+
 HUNDRED_FIRST = """
              Per 100g   Per serve
 Energy       1000kJ     590kJ
@@ -81,6 +91,70 @@ def test_zero_calorie_conflicts_with_any_non_zero_value() -> None:
         "protein": 0,
         "fat": 0,
         "carbs": 0,
+    }
+
+
+def test_the_sodium_row_is_read_in_milligrams() -> None:
+    panel = parse_panel(SODIUM_LABEL)
+
+    # The per-serve figure is 145: the same column rule as every other row.
+    assert panel["sodium"] == 355
+    assert_usable_nutrients(panel)
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    [
+        ("Sodium 355mg", 355),
+        # A label writing grams means the same figure a thousand times over.
+        ("Sodium 0.4g", 400),
+        # No unit at all is the milligrams the label would have printed.
+        ("Sodium 355", 355),
+    ],
+    ids=["milligrams", "grams", "no-unit"],
+)
+def test_a_sodium_figure_is_stored_in_milligrams_whatever_it_was_written_in(
+    row: str, expected: float
+) -> None:
+    assert parse_panel(row)["sodium"] == expected
+
+
+def test_a_salt_row_is_not_read_as_sodium() -> None:
+    # Salt is 2.5 times its sodium, so reading one as the other overstates it
+    # by 150 percent. A panel that prints only salt has no sodium figure.
+    assert "sodium" not in parse_panel("Salt 0.9g")
+
+
+def test_an_ingredient_naming_monosodium_is_not_a_sodium_row() -> None:
+    # Pasted text carries more than the panel, and the row this must not read
+    # is the one whose name merely contains "sodium".
+    text = "Sodium 355mg\nIngredients: water, monosodium glutamate 0.5g"
+
+    assert parse_panel(text)["sodium"] == 355
+
+
+def test_sodium_beyond_a_hundred_grams_per_hundred_gram_is_refused() -> None:
+    salt = {"kcal": 1, "protein": 0, "fat": 0, "carbs": 0, "sodium": 38758}
+
+    # Pure table salt is the ceiling anything edible reaches, and it passes.
+    assert_usable_nutrients(salt)
+
+    with pytest.raises(NutritionError, match="sodium"):
+        assert_usable_nutrients({**salt, "sodium": 200_000})
+
+
+def test_a_zero_calorie_panel_may_still_carry_sodium() -> None:
+    panel = parse_panel("Energy 0kJ\nProtein 0g\nFat 0g\nSodium 38758mg")
+
+    # Sodium carries no energy, so a figure for it cannot contradict the
+    # declaration. Table salt is exactly that shape, and refusing it would
+    # leave the one product whose sodium matters most unstorable.
+    assert nutrients_for_storage(panel, zero_calorie=True) == {
+        "kcal": 0,
+        "protein": 0,
+        "fat": 0,
+        "carbs": 0,
+        "sodium": 38758,
     }
 
 
