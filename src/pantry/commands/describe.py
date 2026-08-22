@@ -24,9 +24,10 @@ def _caveat(product: dict[str, Any]) -> str:
 
 def describe(product: dict[str, Any]) -> str:
     """One dense line per product, wide enough to identify it."""
-    nutrients = product.get("nutrients") or product
     macros = " ".join(
-        f"{round(nutrients.get(key) or 0)}{suffix}" for key, suffix in _MACROS
+        f"{round(value) if value is not None else '?'}{suffix}"
+        for key, suffix in _MACROS
+        for value in (product.get(key),)
     )
 
     identity = f"{product.get('source')}:{product.get('id')}"

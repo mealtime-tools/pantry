@@ -12,7 +12,6 @@ import hashlib
 import json
 import math
 import os
-import re
 import time
 import urllib.error
 import urllib.parse
@@ -27,8 +26,6 @@ SEARCH_URL = "https://search.openfoodfacts.org/search"
 _USER_AGENT = "pantry/0.1 (https://github.com/owahltinez/pantry)"
 _MAX_RESULTS = 100
 _TTL_SECONDS = 24 * 60 * 60
-
-_AMOUNT = re.compile(r"(\d+(?:\.\d+)?)\s*(kg|ml|g|l)\b", re.IGNORECASE)
 
 
 class RemoteFailure(Exception):
@@ -73,21 +70,11 @@ def _nutrients(values: Any) -> dict[str, float]:
         "carbs": _number(source.get("carbohydrates_100g")),
         "fiber": _number(source.get("fiber_100g")),
         "sugar": _number(source.get("sugars_100g")),
-        # The index publishes grams per 100 g, which is what a record holds.
+        # The index publishes grams per 100 g; acquisition scales when it also
+        # supplies a total product weight.
         "sodium": _number(source.get("sodium_100g")),
     }
     return {k: v for k, v in mapped.items() if v is not None}
-
-
-def _amount(value: Any) -> dict[str, float | str]:
-    """Read a simple amount such as "100 g" without guessing odd units."""
-    if not isinstance(value, str):
-        return {}
-
-    match = _AMOUNT.search(value)
-    if not match:
-        return {}
-    return {"size": float(match.group(1)), "unit": match.group(2).lower()}
 
 
 def _brand(value: Any) -> str:
@@ -120,8 +107,7 @@ def _parse_hit(value: Any) -> dict | None:
     if isinstance(quantity, str) and quantity.strip():
         result["quantity"] = quantity.strip()
 
-    result["nutrients"] = _nutrients(value.get("nutriments"))
-    result["serving"] = _amount(value.get("serving_size"))
+    result.update(_nutrients(value.get("nutriments")))
     result["url"] = (
         "https://world.openfoodfacts.org/product/"
         f"{urllib.parse.quote(product_id, safe='')}"

@@ -1,8 +1,8 @@
 """The record format: what a product is, and how it is read and written.
 
-Every nutrient is grams per 100 g. One rule, no exceptions: a consumer scales
-by `grams / 100` at the point of display, and storing a pre-scaled value or a
-second unit would make editing an amount wrong in a way no test would catch.
+Nutrients describe the whole product when `grams` is present. Otherwise
+they describe 100 g. This keeps a bar directly loggable without inventing a
+serving model, while records whose source has no weight remain useful.
 
 Structural fields are enumerated because each is validated in its own way.
 Energy and the four macros are enumerated because they are cross-checked
@@ -16,11 +16,7 @@ from typing import Any
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
-from pantry.nutrition import (
-    CALORIE_FREE,
-    NUTRIENTS,
-    assert_usable_nutrients,
-)
+from pantry.nutrition import NUTRIENTS
 
 # The data owners. `localstore` is deliberately absent: it is a storage
 # layer, and
@@ -52,29 +48,17 @@ PRODUCT_KEYS = (
     "name",
     "brand",
     "url",
-    "serving_size",
-    "serving_unit",
-    "total_size",
-    "total_unit",
+    "grams",
 )
 
-# Energy and the four macros, written next. Enumerated where the vocabulary
-# nutrients are not, because these are the figures cross-checked against each
-# other and against the 100 g the panel describes.
-CORE_NUTRIENTS = ("kcal", "kj", "protein", "fat", "carbs")
+# Every stored nutrient is a top-level key, in this order.
+NUTRIENT_KEYS = ("kcal", "kj", "protein", "fat", "carbs", *NUTRIENTS)
 
 # Written last, after the figures they qualify, so a line read by eye carries
 # the caveat beside the numbers it applies to.
 BASIS_KEYS = ("basis", "basis_note")
 
 Product = dict[str, Any]
-
-_REQUIRED_NUMBERS = ("kcal", "protein", "fat", "carbs")
-
-# Figures that may be absent and are not nutrients, so the vocabulary rules do
-# not apply: `kj` is stored only when a label printed it, and a pack size is a
-# mass rather than a share of one.
-_OPTIONAL_SIZES = ("kj", "serving_size", "total_size")
 
 # Grams per 100 g, so 100 is the ceiling for every nutrient alike. Pure table
 # salt is only 38.758 g of sodium, so nothing edible comes near it.
@@ -83,9 +67,7 @@ _MAX_PER_100G = 100
 # Every key a record may hold. Closed rather than open: an unrecognised key is
 # a misspelling far more often than it is a new field, and `sodum` would store
 # cleanly and then no consumer would ever find the sodium again.
-_ALLOWED_KEYS = frozenset(
-    (*PRODUCT_KEYS, *CORE_NUTRIENTS, *NUTRIENTS, *BASIS_KEYS)
-)
+_ALLOWED_KEYS = frozenset((*PRODUCT_KEYS, *NUTRIENT_KEYS, *BASIS_KEYS))
 
 
 class ProductError(ValueError):
@@ -116,20 +98,24 @@ def assert_identity(product: Product) -> None:
 
 
 def _check_number(
-    product: Product, key: str, optional: bool, maximum: float | None = None
+    values: dict[str, Any],
+    label: str,
+    key: str,
+    optional: bool,
+    maximum: float | None = None,
 ) -> None:
     """Reject a figure that is absent, not a number, negative, or too big."""
-    value = product.get(key)
+    value = values.get(key)
     if value is None:
         if optional:
             return
-        raise ProductError(f"{_label(product)} has invalid {key}: None")
+        raise ProductError(f"{label} has invalid {key}: None")
 
     numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
     if not numeric or not math.isfinite(value) or value < 0:
-        raise ProductError(f"{_label(product)} has invalid {key}: {value}")
+        raise ProductError(f"{label} has invalid {key}: {value}")
     if maximum is not None and value > maximum:
-        raise ProductError(f"{_label(product)} has implausible {key}: {value}")
+        raise ProductError(f"{label} has implausible {key}: {value}")
 
 
 def _check_basis(product: Product) -> None:
@@ -162,13 +148,8 @@ def _check_keys(product: Product) -> None:
 
 
 def record_keys(product: Product) -> tuple[str, ...]:
-    """The order this record's keys are written in.
-
-    Vocabulary nutrients sort alphabetically, which is what removes the need to
-    enumerate them: adding one changes no order and diffs no other line.
-    """
-    held = sorted(key for key in product if key in NUTRIENTS)
-    return (*PRODUCT_KEYS, *CORE_NUTRIENTS, *held, *BASIS_KEYS)
+    """The order this record's keys are written in."""
+    return (*PRODUCT_KEYS, *NUTRIENT_KEYS, *BASIS_KEYS)
 
 
 def assert_product_record(product: Product) -> None:
@@ -180,41 +161,22 @@ def assert_product_record(product: Product) -> None:
     """
     assert_identity(product)
     _check_keys(product)
-
-    for key in _REQUIRED_NUMBERS:
-        _check_number(product, key, optional=False)
-    for key in _OPTIONAL_SIZES:
-        _check_number(product, key, optional=True)
-
-    # One rule for the whole vocabulary. Capped here rather than with the panel
-    # rules because both zero-energy paths return before those run, and every
-    # path that authors a record reaches this function.
-    for key in NUTRIENTS:
-        _check_number(product, key, optional=True, maximum=_MAX_PER_100G)
+    fallback = product.get("grams") is None
+    for key in NUTRIENT_KEYS:
+        maximum = (
+            _MAX_PER_100G if fallback and key not in ("kcal", "kj") else None
+        )
+        _check_number(
+            product, _label(product), key, optional=True, maximum=maximum
+        )
+    _check_number(product, _label(product), "grams", optional=True)
 
     _check_basis(product)
 
 
 def assert_exportable_product(product: Product) -> None:
-    """Strict validation for mutable and newly imported records."""
+    """Validate a mutable record without filling missing nutrition."""
     assert_product_record(product)
-
-    # A confirmed zero-calorie record is the one shape the nutrition rules
-    # cannot express, so it is checked for internal consistency instead. A
-    # calorie-free nutrient is exempt: table salt is a genuine 0 kcal record
-    # with 38.758 g of sodium in it.
-    if product.get("kcal") == 0:
-        claimed = (*CORE_NUTRIENTS, *NUTRIENTS)
-        for key in (k for k in claimed if k not in CALORIE_FREE):
-            value = product.get(key)
-            if value is not None and value != 0:
-                raise ProductError(
-                    f"{_label(product)} has zero energy but "
-                    f"non-zero {key}: {value}"
-                )
-        return
-
-    assert_usable_nutrients(product)
 
 
 def canonicalize(product: Product, source: str | None = None) -> Product:
@@ -229,11 +191,12 @@ def canonicalize(product: Product, source: str | None = None) -> Product:
 
     # A shard's filename supplies its source, so its rows need not repeat it.
     skip = {"source"} if source else set()
-    return {
-        key: product[key]
-        for key in record_keys(product)
-        if key not in skip and product.get(key) is not None
-    }
+    canonical = {}
+    for key in record_keys(product):
+        if key in skip or product.get(key) is None:
+            continue
+        canonical[key] = product[key]
+    return canonical
 
 
 def _sort_key(product: Product) -> tuple[int, tuple[int, int, str]]:
@@ -275,7 +238,7 @@ def parse_jsonl(
                 # order, which is what the shard on disk is written in.
                 parsed = {"source": source, **parsed}
             assert_identity(parsed)
-
+            _check_keys(parsed)
             # The one key checked on the way in: an unrecognised basis reads
             # as "absent", and absent means as-sold, so the record would
             # silently lose the warning it was written to carry. Nothing else

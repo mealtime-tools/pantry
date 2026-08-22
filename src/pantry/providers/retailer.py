@@ -5,7 +5,7 @@ The three rules that live here, in the order they matter:
   1. **A block ends the session.** No retry, no second user agent, no proxy,
      no captcha solving, no lowered pacing. The user gets four or five loads
      before a captcha, and looking less like automation would cost them that.
-     When a site says no, the answer is `pantry add --manual`.
+     When a site says no, the answer is `pantry add --input -`.
   2. **A hard page budget**, claimed before the request and counted even when
      the request was refused, because the site served it either way.
   3. **Polite pacing** between requests. Not a knob to tune downwards.
@@ -68,9 +68,7 @@ class RetailerProvider(Provider):
 
         html = self._pages.load(ref.url or "")
         site = ProductRef(source=ref.source, id=ref.id, url=ref.url or "")
-        return parse_product_page(
-            site, html, zero_calorie=options.zero_calorie
-        )
+        return parse_product_page(site, html)
 
     def report(self) -> list[str]:
         """The budget is what the user is actually spending, so it is said."""

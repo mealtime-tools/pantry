@@ -19,10 +19,9 @@ from urllib.parse import urlsplit
 
 from pantry.ids import normalize_id
 from pantry.nutrition import (
-    NUTRIENTS,
     nutrients_for_storage,
-    parse_amount,
     panel_from_rows,
+    parse_amount,
 )
 from pantry.products import Product
 
@@ -75,7 +74,6 @@ def _read_coles(payload: Any) -> dict[str, Any]:
         "name": str(product.get("name") or ""),
         "brand": str(product.get("brand") or ""),
         "panel": panel_from_rows(rows),
-        "serving": nutrition.get("servingSize"),
         "total": product.get("size"),
     }
 
@@ -105,7 +103,6 @@ def _read_woolworths(payload: Any) -> dict[str, Any]:
         "name": str(product.get("Name") or ""),
         "brand": str(product.get("Brand") or ""),
         "panel": panel_from_rows(rows),
-        "serving": information[0].get("ServingSize") if information else None,
         "total": product.get("PackageSize"),
     }
 
@@ -135,7 +132,7 @@ def product_ref(url: str) -> ProductRef:
     source = next((s for s, (h, *_) in _SITES.items() if bare in h), None)
     if source is None:
         raise SiteError(
-            f"no reader for {host}; add it with `pantry add --manual`"
+            f"no reader for {host}; add it with `pantry add --input -`"
         )
 
     site_id = _SITES[source][1](parts.path)
@@ -161,14 +158,10 @@ def _next_data(html: str) -> Any:
     return (payload or {}).get("props", {}).get("pageProps")
 
 
-def parse_product_page(
-    ref: ProductRef, html: str, zero_calorie: bool = False
-) -> Product:
+def parse_product_page(ref: ProductRef, html: str) -> Product:
     """Read a fetched page into a record in exactly the JSONL schema.
 
-    Raises if the panel is missing or implausible unless the caller explicitly
-    declares a zero-calorie product. That refusal is what distinguishes a
-    genuine zero from a block page or a discontinued product.
+    Missing nutrients stay missing; reported values are validated.
     """
     if ref.source not in _SITES:
         raise SiteError(f"no reader for source {ref.source}")
@@ -179,20 +172,18 @@ def parse_product_page(
 
     # The panel is validated before anything is built from it, so a bad page
     # fails with the reason rather than producing a record nobody can trust.
-    panel = nutrients_for_storage(page["panel"], zero_calorie)
+    panel = nutrients_for_storage(page["panel"])
 
-    serving_size, serving_unit = parse_amount(page["serving"])
-    total_size, total_unit = parse_amount(page["total"])
+    grams = grams_from_amount(parse_amount(page["total"]))
 
     return build_record(
         source=ref.source,
         product_id=ref.id,
         name=page["name"],
         brand=page["brand"],
-        panel=panel,
+        panel=scale_panel(panel, grams),
         url=ref.url,
-        serving=(serving_size, serving_unit),
-        total=(total_size, total_unit),
+        grams=grams,
     )
 
 
@@ -204,24 +195,17 @@ def build_record(
     brand: str,
     panel: dict[str, float],
     url: str | None = None,
-    serving: tuple[float | None, str | None] = (None, None),
-    total: tuple[float | None, str | None] = (None, None),
+    grams: float | None = None,
     basis: str | None = None,
     basis_note: str | None = None,
 ) -> Product:
     """Assemble a record, omitting every field the label did not supply."""
     optional = {
-        # Present only when the label printed kilojoules; never derived back.
-        "kj": panel.get("kj"),
-        **{key: panel.get(key) for key in NUTRIENTS},
         # Absent unless a caller declares one: an unmarked record is as-sold.
         "basis": basis,
         "basis_note": basis_note,
         "url": url,
-        "serving_size": serving[0],
-        "serving_unit": serving[1],
-        "total_size": total[0],
-        "total_unit": total[1],
+        "grams": grams,
     }
 
     record: Product = {
@@ -229,14 +213,33 @@ def build_record(
         "id": product_id,
         "name": name,
         "brand": brand,
-        "fat": panel["fat"],
-        "carbs": panel["carbs"],
-        "protein": panel["protein"],
-        # One decimal is what the database is written with. Rounded half-up
-        # rather than by `round`, whose banker's rounding would disagree with
-        # the JavaScript that wrote the frozen shards.
-        "kcal": math.floor(panel["kcal"] * 10 + 0.5) / 10,
     }
+    nutrients = {
+        key: value for key, value in panel.items() if value is not None
+    }
+    if panel.get("kcal") is not None:
+        # Match the one-decimal historical shard format.
+        nutrients["kcal"] = math.floor(panel["kcal"] * 10 + 0.5) / 10
+    record.update(nutrients)
     record.update({k: v for k, v in optional.items() if v is not None})
 
     return record
+
+
+def grams_from_amount(total: tuple[float | None, str | None]) -> float | None:
+    amount, unit = total
+    if amount is None:
+        return None
+    if unit == "g":
+        return amount
+    if unit == "kg":
+        return amount * 1000
+    return None
+
+
+def scale_panel(
+    panel: dict[str, float], grams: float | None
+) -> dict[str, float]:
+    if grams is None:
+        return panel
+    return {key: value * grams / 100 for key, value in panel.items()}

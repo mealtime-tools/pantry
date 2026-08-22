@@ -6,11 +6,13 @@ minute. Acquiring a barcode goes through that same cached query rather than a
 second endpoint, so the one rate limit stays in one place.
 """
 
-from pantry.nutrition import nutrients_for_storage, parse_amount
+from pantry.nutrition import NUTRIENTS, nutrients_for_storage, parse_amount
 from pantry.open_food_facts import OpenFoodFacts, RemoteFailure
 from pantry.products import Product
 from pantry.providers import AcquireOptions, Provider, Reference
-from pantry.sites import build_record
+from pantry.sites import build_record, grams_from_amount, scale_panel
+
+NUTRIENT_KEYS = ("kcal", "kj", "protein", "fat", "carbs", *NUTRIENTS)
 
 # The index does not match a barcode as free text — measured: `q=<barcode>`
 # returns nothing — so an exact acquire asks for the field, which answers with
@@ -34,24 +36,21 @@ class OpenFoodFactsProvider(Provider):
     def acquire(self, ref: Reference, options: AcquireOptions) -> Product:
         """Turn one community row into a record, or refuse it.
 
-        The panel goes through the same validation as a pasted label, so a row
-        that published no energy is refused rather than stored as zeros.
+        The panel goes through the same validation as a pasted label.
         """
         hit = self._exact(ref.id)
         panel = nutrients_for_storage(
-            dict(hit.get("nutrients") or {}), options.zero_calorie
+            {key: hit[key] for key in NUTRIENT_KEYS if key in hit}
         )
-        serving = hit.get("serving") or {}
-
+        grams = grams_from_amount(parse_amount(hit.get("quantity")))
         return build_record(
             source=ref.source,
             product_id=ref.id,
             name=hit["name"],
             brand=hit.get("brand", ""),
-            panel=panel,
+            panel=scale_panel(panel, grams),
             url=hit.get("url"),
-            serving=(serving.get("size"), serving.get("unit")),
-            total=parse_amount(hit.get("quantity")),
+            grams=grams,
         )
 
     def _exact(self, barcode: str) -> dict:
@@ -63,5 +62,5 @@ class OpenFoodFactsProvider(Provider):
 
         raise RemoteFailure(
             f"Open Food Facts has no product {barcode}; "
-            f"enter it with `pantry add --manual` instead"
+            f"enter it with `pantry add --input -` instead"
         )

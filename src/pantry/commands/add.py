@@ -1,22 +1,22 @@
 """`pantry add` — acquire one record and store it.
 
 One verb for every way of getting the same thing: a retailer page, a
-FoodData Central id, an Open Food Facts barcode, or a panel pasted by hand.
+FoodData Central id, an Open Food Facts barcode, or structured JSON.
 The order never changes and the order is the point — resolve the reference,
 check what is already held, and only then let a provider spend anything.
 """
+
+import json
+import math
+from typing import TextIO
 
 import click
 from agentcli import UsageError, emit, json_option
 
 from pantry.commands.describe import describe
 from pantry.ids import normalize_id
-from pantry.nutrition import (
-    nutrients_for_storage,
-    panel_from_rows,
-    parse_amount,
-    parse_panel,
-)
+from pantry.local import as_result
+from pantry.nutrition import nutrients_for_storage
 from pantry.products import (
     PRODUCT_BASES,
     PRODUCT_SOURCES,
@@ -48,7 +48,7 @@ def _human(payload: dict) -> list[str]:
         lines.append(f"stored {describe(payload['product'])}")
     elif payload["reason"] == "held":
         lines.append(f"already held: {describe(payload['product'])}")
-        lines.append("pass --refresh to re-read it, or --manual to correct it")
+        lines.append("pass --refresh to re-read it, or --input to correct it")
     else:
         lines.append(f"no field changes for {label}")
 
@@ -69,7 +69,7 @@ def _payload(
         "reason": reason,
         "source": product["source"],
         "id": product["id"],
-        "product": product,
+        "product": as_result(product),
         "changes": changes or [],
         "notes": notes or [],
     }
@@ -84,7 +84,15 @@ def _preserved(held: Product | None, product: Product) -> Product:
     provider can ever re-supply. There is deliberately no way to remove a
     field: correcting one means restating it.
     """
-    return {**held, **product} if held else product
+    if not held:
+        return product
+    merged = {**held, **product}
+    if held.get("grams") != product.get("grams"):
+        for key in _PANEL_KEYS - product.keys():
+            merged.pop(key, None)
+    if "grams" not in product:
+        merged.pop("grams", None)
+    return merged
 
 
 def _changed_fields(before: Product, after: Product) -> list[str]:
@@ -99,41 +107,71 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
     ]
 
 
-def _stated_rows(nutrients: tuple[str, ...]) -> list[tuple[str, str]]:
-    """`-n sodium=355mg` as the rows a structured source would have given."""
-    rows = []
-    for stated in nutrients:
-        name, separator, value = stated.partition("=")
-        if not separator or not name.strip() or not value.strip():
-            raise UsageError(f"--nutrient wants NAME=VALUE, not {stated!r}")
-        rows.append((name.strip(), value.strip()))
+_PANEL_KEYS = frozenset(
+    {
+        "kcal",
+        "kj",
+        "protein",
+        "fat",
+        "carbs",
+        "fiber",
+        "sodium",
+        "sugar",
+    }
+)
 
-    return rows
+
+def _read_input(text: str) -> tuple[dict[str, float], float | None]:
+    """Read canonical whole-item nutrients and optional total weight."""
+    try:
+        decoded = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise UsageError(f"input must be JSON: {error}") from None
+
+    if not isinstance(decoded, dict):
+        raise UsageError("input must be one JSON object")
+    unknown = sorted(set(decoded) - _PANEL_KEYS - {"grams"})
+    if unknown:
+        raise UsageError(f"unknown nutrient keys: {', '.join(unknown)}")
+
+    panel: dict[str, float] = {}
+    for key in _PANEL_KEYS:
+        value = decoded.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise UsageError(f"{key} must be a number or null")
+        if not math.isfinite(value) or value < 0:
+            raise UsageError(f"{key} must be non-negative and finite")
+        panel[key] = float(value)
+
+    grams = decoded.get("grams")
+    if grams is not None:
+        if (
+            not isinstance(grams, (int, float))
+            or isinstance(grams, bool)
+            or not math.isfinite(grams)
+            or grams <= 0
+        ):
+            raise UsageError("grams must be a positive finite number")
+        grams = float(grams)
+
+    return panel, grams
 
 
 @click.command("add")
 @click.argument("ref", required=False)
 @click.option(
-    "--manual",
-    is_flag=True,
-    help="Read the panel from stdin instead. Never touches the network.",
+    "--input",
+    "input_file",
+    type=click.File("r", encoding="utf-8"),
+    help="Read one JSON object from PATH, or '-' for stdin.",
 )
 @click.option(
     "--id", "product_id", help="Native id for a manual entry, with no prefix."
 )
-@click.option(
-    "--nutrient",
-    "-n",
-    "nutrients",
-    multiple=True,
-    metavar="NAME=VALUE",
-    help="State one row outright, e.g. -n sodium=355mg. Repeatable, and"
-    " skips reading a panel from stdin.",
-)
 @click.option("--name", help="The product name as the label prints it.")
 @click.option("--brand", default="", help="The brand, if the label names one.")
-@click.option("--serving", help='Serving size as written, e.g. "59g".')
-@click.option("--total", help='Pack size as written, e.g. "450g".')
 @click.option(
     "--refresh",
     is_flag=True,
@@ -156,18 +194,13 @@ def _stated_rows(nutrients: tuple[str, ...]) -> list[tuple[str, str]]:
 @click.option(
     "--basis",
     type=click.Choice(PRODUCT_BASES),
-    help="Manual only: what the panel's figures are measured against. "
+    help="Input only: what the nutrient figures are measured against. "
     "Absent means as-sold.",
 )
 @click.option(
     "--basis-note",
-    help="Manual only: what a consumer must read before scaling, e.g. "
+    help="Input only: what a consumer must read before scaling, e.g. "
     '"per 100 mL prepared; 1 cube (10.5 g) makes 500 mL".',
-)
-@click.option(
-    "--zero-calorie",
-    is_flag=True,
-    help="Confirm an absent or all-zero panel. Refused if anything is set.",
 )
 @click.option(
     "--api-key",
@@ -178,27 +211,23 @@ def _stated_rows(nutrients: tuple[str, ...]) -> list[tuple[str, str]]:
 def add(
     ctx: click.Context,
     ref: str | None,
-    manual: bool,
-    nutrients: tuple[str, ...],
+    input_file: TextIO | None,
     product_id: str | None,
     name: str | None,
     brand: str,
-    serving: str | None,
-    total: str | None,
     refresh: bool,
     browser: bool,
     budget: int,
     basis: str | None,
     basis_note: str | None,
-    zero_calorie: bool,
     api_key: str | None,
     json_output: bool,
 ) -> None:
     """Acquire the product REF names and store it in the localstore.
 
     REF is a retailer url, `usda:<fdcId>` or `off:<barcode>`, and whichever
-    provider claims it is the one asked. With --manual the panel is read from
-    stdin instead and REF may still be a retailer url, which keeps that
+    provider claims it is the one asked. With --input the record is read from
+    a file or stdin and REF may still be a retailer url, which keeps that
     identity: a blocked fetch is a redirection here, not a dead end.
     """
     state = deps(ctx)
@@ -211,26 +240,24 @@ def add(
         # after a page load would spend a request the user cannot get back.
         # Nothing on a retailer page or in an API response declares a basis,
         # so accepting one there would store a claim no source made.
-        if (basis is not None or basis_note is not None) and not manual:
-            raise UsageError("--basis and --basis-note need --manual")
+        if (
+            basis is not None or basis_note is not None
+        ) and input_file is None:
+            raise UsageError("--basis and --basis-note need --input")
         if basis_note is not None and basis is None:
             raise UsageError("--basis-note needs --basis")
 
         reference = resolve_reference(ref) if ref else None
 
-        if manual:
+        if input_file is not None:
             product = _manual_record(
-                state,
                 reference,
+                input_file.read(),
                 product_id=product_id,
                 name=name,
                 brand=brand,
-                serving=serving,
-                total=total,
                 basis=basis,
                 basis_note=basis_note,
-                zero_calorie=zero_calorie,
-                nutrients=nutrients,
             )
             held = state.store.find(product["source"], product["id"])
             product = _preserved(held, product)
@@ -239,7 +266,7 @@ def add(
             return
 
         if reference is None:
-            raise UsageError(f"add needs {REF_FORMS}, or --manual")
+            raise UsageError(f"add needs {REF_FORMS}, or --input")
 
         provider = state.providers.get(reference.provider)
         held = state.store.find(reference.source, reference.id)
@@ -260,7 +287,6 @@ def add(
             provider,
             reference,
             AcquireOptions(
-                zero_calorie=zero_calorie,
                 browser=browser,
                 budget=budget,
                 api_key=api_key,
@@ -320,20 +346,16 @@ def _emit(payload: dict, json_output: bool) -> None:
 
 
 def _manual_record(
-    state: Deps,
     reference: Reference | None,
+    text: str,
     *,
     product_id: str | None,
     name: str | None,
     brand: str,
-    serving: str | None,
-    total: str | None,
     basis: str | None,
     basis_note: str | None,
-    zero_calorie: bool,
-    nutrients: tuple[str, ...] = (),
 ) -> Product:
-    """Build one record from a stated or pasted panel, whatever failed to load.
+    """Build one record from a JSON panel, whatever failed to load.
 
     A url supplies the native id, the source and the link at once; an explicit
     --id is always a manual identity.
@@ -355,14 +377,8 @@ def _manual_record(
     if not name:
         raise UsageError("a manual entry needs --name")
 
-    # A stated row needs none of a pasted panel's guesswork: no column to
-    # choose, no name to find in a line, and its unit is written down.
-    figures = (
-        panel_from_rows(_stated_rows(nutrients))
-        if nutrients
-        else parse_panel(state.read_stdin(optional=zero_calorie))
-    )
-    panel = nutrients_for_storage(figures, zero_calorie)
+    figures, grams = _read_input(text)
+    panel = figures if grams is not None else nutrients_for_storage(figures)
 
     return build_record(
         source=reference.source if reference else "manual",
@@ -371,8 +387,7 @@ def _manual_record(
         brand=brand,
         panel=panel,
         url=reference.url if reference else None,
-        serving=parse_amount(serving),
-        total=parse_amount(total),
+        grams=grams,
         basis=basis,
         basis_note=basis_note,
     )

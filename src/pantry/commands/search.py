@@ -4,6 +4,7 @@ import click
 from agentcli import emit, json_option, limit_option
 
 from pantry.commands.describe import describe
+from pantry.local import result_with_nulls
 from pantry.providers import PROVIDER_NAMES
 from pantry.session import deps, guard, wants_json
 
@@ -59,7 +60,10 @@ def search(
 
         results: list[dict] = []
         for provider in providers:
-            results.extend(provider.search(text, limit))
+            results.extend(
+                result_with_nulls(result)
+                for result in provider.search(text, limit)
+            )
 
         emit(
             {

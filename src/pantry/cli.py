@@ -1,13 +1,12 @@
 """Command-line entry point. Groups and wiring; logic is in `commands/`."""
 
-import sys
 from dataclasses import replace
 from pathlib import Path
 
 import click
-from agentcli import JsonAwareGroup, guide_command, skill_group
+from agentcli import JsonAwareGroup, skill_group
 
-from pantry import data, helptext
+from pantry import data
 from pantry.browser import BrowserTransport, launch_chrome
 from pantry.commands.add import add
 from pantry.commands.lookup import lookup
@@ -45,20 +44,6 @@ def _open_transports(browser: bool) -> TransportSet:
     return TransportSet([plain, BrowserTransport(page)], close)
 
 
-def _read_stdin(optional: bool = False) -> str:
-    """Read the nutrition panel a user pastes.
-
-    A terminal is told how to finish, because a command that appears to hang
-    on stdin is indistinguishable from one that has crashed.
-    """
-    if sys.stdin.isatty():
-        if optional:
-            return ""
-        click.echo("paste the nutrition panel, then press Ctrl-D:", err=True)
-
-    return sys.stdin.read()
-
-
 def _providers(store: Store) -> Providers:
     """Every source this run can use.
 
@@ -91,8 +76,8 @@ def _providers(store: Store) -> Providers:
 def main(ctx: click.Context, json_output: bool) -> None:
     """Food product records, their sources, and search over them.
 
-    Nutrients are per 100 g in every record. Identity is the pair
-    (source, id). Run `pantry guide` for the full agent-facing manual.
+    Nutrients describe the whole item, or 100 g when grams is absent.
+    Identity is (source, id).
     """
     # Tests inject prepared dependencies; only build the real ones otherwise.
     # Replaced rather than mutated so one injected set can serve several runs.
@@ -107,7 +92,6 @@ def main(ctx: click.Context, json_output: bool) -> None:
         store=store,
         providers=_providers(store),
         write_out=lambda path, text: write_atomic(Path(path), text),
-        read_stdin=_read_stdin,
         json_output=json_output,
     )
 
@@ -116,7 +100,6 @@ for command in (
     search,
     lookup,
     add,
-    guide_command(helptext.GUIDE),
     skill_group(name="pantry", package="pantry"),
 ):
     main.add_command(command)

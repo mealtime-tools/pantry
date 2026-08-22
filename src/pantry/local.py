@@ -15,8 +15,18 @@ from collections import defaultdict
 from rapidfuzz import fuzz, process
 
 from pantry.ids import id_sort_key
-from pantry.nutrition import NUTRIENTS
 from pantry.products import PRODUCT_SOURCES, Product
+
+NUTRIENT_KEYS = ("kcal", "protein", "fat", "carbs", "fiber", "sodium", "sugar")
+
+
+def result_with_nulls(result: dict) -> dict:
+    """Complete a provider search result without inventing measurements."""
+    shown = dict(result)
+    for key in NUTRIENT_KEYS:
+        shown[key] = shown.get(key)
+    return shown
+
 
 # Below this, a word pair is a coincidence rather than a spelling variant.
 # "yogurt" against "yoghurt" scores 92, which is the case that sets the floor.
@@ -45,30 +55,12 @@ def as_result(product: Product) -> dict:
     """The search-result shape agents consume. Absent fields stay absent."""
     name = product.get("name", "")
     brand = product.get("brand", "")
-    serving = {
-        key: product[full]
-        for key, full in (("size", "serving_size"), ("unit", "serving_unit"))
-        if product.get(full) is not None
-    }
-
-    # Energy and the macros are on every record, so a default only stands in
-    # for a shard row read without validation. Every other nutrient is carried
-    # only when the record holds it: a defaulted 0 would read as a product free
-    # of that nutrient rather than one that never stated it.
-    nutrients = {
-        key: product.get(key) or 0
-        for key in ("kcal", "protein", "fat", "carbs")
-    }
-    nutrients.update(
-        {k: product[k] for k in NUTRIENTS if product.get(k) is not None}
-    )
-
+    # Missing stays missing; only an explicit source value may become zero.
     result = {
         "id": product.get("id"),
         "name": name,
         "title": f"{name} ({brand})" if brand else name,
-        "nutrients": nutrients,
-        "serving": serving,
+        **{key: product.get(key) for key in NUTRIENT_KEYS},
     }
     # Beside the nutrients, for the same reason they are stored together: a
     # prepared-basis result that looks identical to an as-sold one is the bug.
@@ -81,6 +73,8 @@ def as_result(product: Product) -> dict:
 
     if product.get("url") is not None:
         result["url"] = product["url"]
+    if product.get("grams") is not None:
+        result["grams"] = product["grams"]
     result["source"] = product.get("source")
 
     return result

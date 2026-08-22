@@ -115,13 +115,13 @@ def test_imports_only_per_100g_sheet_and_maps_fields(tmp_path):
         "id": "F000002",
         "name": "Abalone",
         "brand": "",
+        "kcal": 100,
         "kj": 418.4,
+        "protein": 20,
         "fat": 2,
         "carbs": 1,
-        "protein": 20,
         "fiber": 0,
         "sugar": 0,
-        "kcal": 100,
     }
 
 

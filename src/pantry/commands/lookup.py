@@ -4,6 +4,7 @@ import click
 from agentcli import emit, json_option
 
 from pantry.commands.describe import describe
+from pantry.local import as_result
 from pantry.products import PRODUCT_SOURCES
 from pantry.session import deps, guard, wants_json
 
@@ -31,12 +32,13 @@ def lookup(
 
     with guard(json_output):
         product = deps(ctx).store.find(source, product_id)
+        shown = as_result(product) if product is not None else None
         emit(
             {
                 "found": product is not None,
                 "source": source,
                 "id": product_id,
-                "product": product,
+                "product": shown,
             },
             json_output=json_output,
             human=_human,

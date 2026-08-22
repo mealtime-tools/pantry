@@ -1,15 +1,11 @@
-"""Reading a nutrition panel, from a site's data or from text a user pasted.
+"""Validate structured nutrition rows from retailer and database sources.
 
-Everything downstream of this file is grams per 100 g, and everything upstream
-of it is a label written for humans: two columns, trace amounts written as a
-bound, energy in kilojoules, milligrams for the minerals, sub-rows indented
-under their parent. This is where that becomes numbers, and where a panel that
-did not parse is refused.
+Everything returned by this file is grams per 100 g, and everything upstream
+of it is a row whose source already separated its name from its value.
 """
 
 import math
 import re
-from typing import Any
 
 _KJ_PER_KCAL = 0.239006
 
@@ -24,11 +20,6 @@ _MG_PER_G = 1000
 # name absent from here is refused rather than stored, because a misspelled key
 # stores cleanly and then no consumer ever finds the nutrient again.
 NUTRIENTS = {"fiber": True, "sodium": False, "sugar": True}
-
-# The nutrients a confirmed zero-energy record may still hold. A mineral has no
-# calories, so table salt is a genuine 0 kcal record with 38.758 g of sodium;
-# a sugar figure beside a zero energy is a half-parsed panel.
-CALORIE_FREE = tuple(key for key, energy in NUTRIENTS.items() if not energy)
 
 # No food exceeds pure fat, which is 900 kcal per 100 g.
 _MAX_KCAL_PER_100G = 900
@@ -90,9 +81,6 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
 # The units a pack or serving size is written in, at the end of the figure.
 _UNIT = re.compile(r"(kg|ml|l|g)\s*$", re.IGNORECASE)
 
-_PER_HUNDRED = re.compile(r"per\s*100\s*(?:g|ml)", re.IGNORECASE)
-_PER_SERVING = re.compile(r"per\s*serv", re.IGNORECASE)
-
 
 class NutritionError(ValueError):
     """A panel that is not worth storing, or a declaration that conflicts."""
@@ -150,58 +138,6 @@ def _row_key(label: str) -> str | None:
     return None
 
 
-def _per_hundred_first(text: str) -> bool:
-    """Whether the per-100 g figures are the first column, not the last.
-
-    The Australian standard puts "per serving" first and "per 100 g" second,
-    so the last number on a row is the right one by default. A label that
-    reverses them says so in its header, the only place the two are named.
-    """
-    hundred = _PER_HUNDRED.search(text)
-    serving = _PER_SERVING.search(text)
-    if not hundred or not serving:
-        return False
-    return hundred.start() < serving.start()
-
-
-def _column(found: list[tuple[float, str]], first: bool):
-    """The figure belonging to the per-100 g column of one row."""
-    if not found:
-        return None
-    return found[0] if first else found[-1]
-
-
-def parse_panel(text: str) -> dict[str, float]:
-    """Read a nutrition panel out of pasted text.
-
-    Rows it does not recognize are ignored and rows that are absent stay
-    absent; `nutrients_for_storage` decides whether what came out is enough.
-    """
-    first = _per_hundred_first(text)
-    panel: dict[str, float] = {}
-
-    for line in text.split("\n"):
-        key = _row_key(line)
-        if key is None or key == "skip":
-            continue
-
-        found = [q for q in _quantities(line) if math.isfinite(q[0])]
-        if not found:
-            continue
-
-        if key == "kcal":
-            _read_energy(panel, found, first)
-            continue
-
-        chosen = _column(found, first)
-        if not chosen:
-            continue
-
-        panel[key] = _in_grams(key, chosen)
-
-    return panel
-
-
 def _in_grams(key: str, chosen: tuple[float, str]) -> float:
     """One row's figure as the grams a record stores.
 
@@ -244,7 +180,7 @@ def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
             continue
 
         if key == "kcal":
-            _read_energy(panel, found, first=False)
+            _read_energy(panel, found)
             continue
 
         figure, unit = found[0]
@@ -257,7 +193,7 @@ def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
 
 
 def _read_energy(
-    panel: dict[str, float], found: list[tuple[float, str]], first: bool
+    panel: dict[str, float], found: list[tuple[float, str]]
 ) -> None:
     """Energy is the one row that can carry two units in a single column.
 
@@ -267,90 +203,27 @@ def _read_energy(
     reads it, kj because deriving it back would invent a figure nobody wrote.
     """
     calories = [q for q in found if q[1] in ("kcal", "cal")]
-    chosen = _column(calories or found, first)
-    if not chosen:
-        return
-
-    value, unit = chosen[0], chosen[1] or "kj"
+    value, unit = (calories or found)[0]
+    unit = unit or "kj"
     panel["kcal"] = energy_to_kcal(value, unit)
     if unit == "kj":
         panel["kj"] = value
 
 
-def _check_mass(panel: dict[str, Any], key: str) -> None:
-    """Refuse an amount that is absent, impossible, or over 100 g per 100 g."""
-    value = panel.get(key)
-    if value is None:
-        raise NutritionError(f"nutrition panel has no {key}")
-    if not math.isfinite(value) or value < 0:
-        raise NutritionError(
-            f"nutrition panel has an impossible {key}: {value}"
-        )
-    if value > 100:
-        raise NutritionError(
-            f"nutrition panel has more than 100 g of {key} per 100 g"
-        )
-
-
-def assert_usable_nutrients(panel: dict[str, Any]) -> None:
-    """Refuse a panel that is not worth storing.
-
-    The failure this exists to prevent is a half-parsed panel becoming a
-    product with inferred zero calories: nothing downstream would flag it, and
-    every recipe using that ingredient would quietly under-count.
-    """
-    kcal = panel.get("kcal")
-    if kcal is None or not math.isfinite(kcal) or kcal <= 0:
-        raise NutritionError(f"nutrition panel has no usable energy: {kcal}")
-    if kcal > _MAX_KCAL_PER_100G:
-        raise NutritionError(
-            f"nutrition panel has more energy than pure fat: {kcal} kcal"
-        )
-
-    for key in ("protein", "fat", "carbs"):
-        _check_mass(panel, key)
-
-    # Absent is fine (plenty of labels omit them) but present and wrong is
-    # not. One rule for the whole vocabulary: every figure is grams per 100 g,
-    # so the mass check is the only check any of them needs.
-    for key in NUTRIENTS:
-        if panel.get(key) is not None:
-            _check_mass(panel, key)
-
-    # Catches the two mistakes a per-100 g figure cannot survive: a
-    # per-serving column read by mistake, and a milligram figure landing in a
-    # gram field.
-    mass = panel["protein"] + panel["fat"] + panel["carbs"]
-    if mass > _MASS_TOLERANCE:
-        raise NutritionError(
-            f"nutrition panel holds {mass:.1f} g of macros per 100 g"
-        )
-
-
-def nutrients_for_storage(
-    panel: dict[str, float], zero_calorie: bool = False
-) -> dict[str, float]:
-    """Return a strict panel, or explicit zeros after checking the claim."""
-    if not zero_calorie:
-        assert_usable_nutrients(panel)
-        return panel
-
-    # A confirmation may fill an absent or all-zero panel, but never erase
-    # nutrition that was actually printed. A calorie-free nutrient is exempt
-    # because it is not part of the energy claim being confirmed. An impossible
-    # figure is not waved through with it -- `_check_number` is what refuses
-    # that, on the record every one of these panels becomes.
+def nutrients_for_storage(panel: dict[str, float]) -> dict[str, float]:
+    """Validate reported values without filling any missing value."""
     for key, value in panel.items():
-        if key in CALORIE_FREE:
-            continue
-        if value is not None and (not math.isfinite(value) or value != 0):
-            raise NutritionError(
-                f"--zero-calorie conflicts with nutrition panel {key}: {value}"
-            )
+        if not math.isfinite(value) or value < 0:
+            raise NutritionError(f"nutrition panel has invalid {key}: {value}")
+        if key == "kcal" and value > _MAX_KCAL_PER_100G:
+            raise NutritionError(f"nutrition panel has invalid kcal: {value}")
+        if key not in ("kcal", "kj") and value > 100:
+            raise NutritionError(f"nutrition panel has invalid {key}: {value}")
 
-    zeroed: dict[str, float] = {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0}
-    zeroed.update(
-        {k: panel[k] for k in CALORIE_FREE if panel.get(k) is not None}
-    )
-
-    return zeroed
+    macros = [panel.get(key) for key in ("protein", "fat", "carbs")]
+    if (
+        all(value is not None for value in macros)
+        and sum(macros) > _MASS_TOLERANCE
+    ):
+        raise NutritionError("nutrition panel has more than 100 g of macros")
+    return panel

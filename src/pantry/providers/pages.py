@@ -64,7 +64,7 @@ class Blocked(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(
             f"the site declined to serve this page ({reason}); "
-            f"enter it with `pantry add --manual` instead"
+            f"enter it with `pantry add --input -` instead"
         )
 
 

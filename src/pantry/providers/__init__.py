@@ -46,7 +46,6 @@ class Reference:
 class AcquireOptions:
     """Everything an acquire may be told. Each provider reads what it needs."""
 
-    zero_calorie: bool = False
     browser: bool = False
     budget: int | None = None
     api_key: str | None = None

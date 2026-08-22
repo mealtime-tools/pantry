@@ -104,9 +104,7 @@ def to_product(food: dict[str, Any]) -> Product:
     """Turn one FoodData Central food into a Pantry record.
 
     Every nutrient the record publishes is carried; every one it omits stays
-    omitted. `assert_exportable_product` decides whether what is left is
-    enough, so a partial USDA record is refused at storage rather than
-    completed with zeros here.
+    omitted.
     """
     identifier = food.get("fdcId")
     if not isinstance(identifier, int):

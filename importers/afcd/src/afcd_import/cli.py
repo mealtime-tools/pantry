@@ -135,7 +135,7 @@ def number_value(value: Any, row: int, label: str) -> float | int:
     return int(number) if number.is_integer() else number
 
 
-def kcal_from_kj(value: float | int) -> float | int:
+def kcal_from_kj(value: float) -> float | int:
     """Convert kilojoules to kilocalories rounded to 0.1."""
     kcal = (Decimal(str(value)) / Decimal("4.184")).quantize(
         Decimal("0.1"), rounding=ROUND_HALF_UP
@@ -198,13 +198,13 @@ def nutrient_products(path: Path) -> dict[str, dict[str, Any]]:
                     row[found[FIELDS["name"]] - 1], row_number, "Food Name"
                 ),
                 "brand": "",
+                "kcal": kcal_from_kj(values["kj"]),
                 "kj": values["kj"],
+                "protein": values["protein"],
                 "fat": values["fat"],
                 "carbs": values["carbs"],
-                "protein": values["protein"],
                 "fiber": values["fiber"],
                 "sugar": values["sugar"],
-                "kcal": kcal_from_kj(values["kj"]),
             }
         return products
     finally:

@@ -41,7 +41,6 @@ class Deps:
     store: Store
     providers: Providers
     write_out: Callable[[Path, str], None]
-    read_stdin: Callable[..., str]
     json_output: bool = False
 
 
@@ -58,7 +57,7 @@ def wants_json(ctx: click.Context, json_output: bool) -> bool:
 @contextlib.contextmanager
 def guard(
     json_output: bool, notes: Callable[[], list[str]] | None = None
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Turn a refusal into the documented exit code and one JSON object.
 
     Requesting `--json` is a promise that stdout is parseable, so an error
