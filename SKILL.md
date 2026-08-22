@@ -8,6 +8,16 @@ description: Search local food product records or Open Food Facts by product tex
 Use the installed `pantry` CLI for food-product data. Every nutrient in every
 record is **per 100 g**; scale by `grams / 100` at the point of display.
 
+Per 100 g **as sold**, unless the record carries `basis`. `basis` is `as_sold`
+or `as_prepared`, and absent — almost every record — means `as_sold`. An
+`as_prepared` panel was printed for the made-up food, so `grams / 100`
+against a weight the user handles is wrong by whatever the preparation adds:
+47x for a stock cube dissolved in 500 mL of water. Never scale such a record
+by a dry weight. Read `basis_note`, which carries the conversion in free text
+("per 100 mL prepared; 1 cube (10.5 g) makes 500 mL"), do the arithmetic from
+that, and say which basis you used. Both keys appear in `search` and `lookup`
+output only when the record carries them.
+
 Identity is the pair `(source, id)`. Sources are `coles`, `woolworths`, `afcd`,
 `usda`, `openfoodfacts`, `manual`. Ids are source-native
 strings compared exactly — leading zeros are significant, and no id carries a
@@ -72,9 +82,10 @@ NAME` restricts to one provider and repeats; `--limit` applies per provider;
 visible. Do this before anything remote, every time.
 
 Each result is `{"id","name","title","nutrients":{kcal,protein,fat,carbs,fiber,
-sugar},"serving":{"size","unit"},"url","source"}`. `nutrients` always carries
-all six keys, missing ones as 0. `serving` may be `{}`, and `url` is absent
-when the record has none. This is a search-result shape, not a stored record.
+sugar},"serving":{"size","unit"},"url","source"}`, plus `basis` and
+`basis_note` when the record carries them. `nutrients` always carries all six
+keys, missing ones as 0. `serving` may be `{}`, and `url` is absent when the
+record has none. This is a search-result shape, not a stored record.
 
 ## Exact lookup
 
@@ -154,6 +165,13 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   optional. Given a retailer url it keeps that identity. Two-column labels are
   handled: the per-100 g column wins, which is the last column unless the
   header names "per 100 g" first.
+- `--basis as_prepared` with `--basis-note "per 100 mL prepared; 1 cube
+  (10.5 g) makes 500 mL"` records that the panel is not on an as-sold basis.
+  Both need `--manual`: no retailer page or API response declares a basis, so
+  reading one there would store a claim no source made. Use them whenever a
+  label computes its figures on added water — a serving size like
+  `300 g (100 g stick + 200 mL water)`, or a column headed "per 100 mL
+  prepared".
 
 There is no age-based refresh. `--refresh` requires the identity to be held
 already, reports `changes`, and leaves the store untouched when nothing
@@ -186,7 +204,8 @@ panel and is refused the moment any value is non-zero.
 
 A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of anything
-per 100 g, or three macros totalling more than 105 g per 100 g.
+per 100 g, three macros totalling more than 105 g per 100 g, or a `basis`
+that is neither `as_sold` nor `as_prepared`.
 
 ## Storage
 

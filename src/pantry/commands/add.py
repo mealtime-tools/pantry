@@ -12,7 +12,12 @@ from agentcli import UsageError, emit, json_option
 from pantry.commands.describe import describe
 from pantry.ids import normalize_id
 from pantry.nutrition import nutrients_for_storage, parse_amount, parse_panel
-from pantry.products import PRODUCT_KEYS, PRODUCT_SOURCES, Product
+from pantry.products import (
+    PRODUCT_BASES,
+    PRODUCT_KEYS,
+    PRODUCT_SOURCES,
+    Product,
+)
 from pantry.providers import (
     REF_FORMS,
     AcquireOptions,
@@ -109,6 +114,17 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
     "refused.",
 )
 @click.option(
+    "--basis",
+    type=click.Choice(PRODUCT_BASES),
+    help="Manual only: what the panel's figures are measured against. "
+    "Absent means as-sold.",
+)
+@click.option(
+    "--basis-note",
+    help="Manual only: what a consumer must read before scaling, e.g. "
+    '"per 100 mL prepared; 1 cube (10.5 g) makes 500 mL".',
+)
+@click.option(
     "--zero-calorie",
     is_flag=True,
     help="Confirm an absent or all-zero panel. Refused if anything is set.",
@@ -131,6 +147,8 @@ def add(
     refresh: bool,
     browser: bool,
     budget: int,
+    basis: str | None,
+    basis_note: str | None,
     zero_calorie: bool,
     api_key: str | None,
     json_output: bool,
@@ -147,6 +165,11 @@ def add(
     provider: Provider | None = None
 
     with guard(json_output, lambda: provider.report() if provider else []):
+        # Nothing on a retailer page or in an API response declares a basis,
+        # so accepting one there would store a claim no source made.
+        if (basis or basis_note) and not manual:
+            raise UsageError("--basis and --basis-note need --manual")
+
         reference = resolve_reference(ref) if ref else None
 
         if manual:
@@ -158,6 +181,8 @@ def add(
                 brand=brand,
                 serving=serving,
                 total=total,
+                basis=basis,
+                basis_note=basis_note,
                 zero_calorie=zero_calorie,
             )
             state.store.add(product)
@@ -254,6 +279,8 @@ def _manual_record(
     brand: str,
     serving: str | None,
     total: str | None,
+    basis: str | None,
+    basis_note: str | None,
     zero_calorie: bool,
 ) -> Product:
     """Build one record from a pasted panel, no matter what refused to load.
@@ -291,4 +318,6 @@ def _manual_record(
         url=reference.url if reference else None,
         serving=parse_amount(serving),
         total=parse_amount(total),
+        basis=basis,
+        basis_note=basis_note,
     )

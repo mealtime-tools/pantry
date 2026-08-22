@@ -18,6 +18,14 @@ NUTRIENTS
   Every figure in every record is per 100 g. Scale by grams / 100 at the point
   of display. Never store a pre-scaled value.
 
+  Per 100 g as sold, unless the record carries `basis`: as_sold or
+  as_prepared, absent meaning as_sold. An as_prepared panel was printed for
+  the made-up food, so scaling it by a dry weight is wrong by whatever the
+  preparation adds -- 47x for a stock cube. Read `basis_note` for the
+  conversion instead ("per 100 mL prepared; 1 cube (10.5 g) makes 500 mL").
+  Both are shown by search and lookup when present, and a basis that is
+  neither value is refused.
+
 PROVIDERS
   local          the frozen shards plus your own. Search. No network.
   openfoodfacts  the public Search-a-licious index. Search and acquire by
@@ -85,7 +93,9 @@ ADD ONE RECORD
   --manual reads the panel from stdin and never touches the network; with a
   retailer url it keeps that identity, so a blocked page is a redirection and
   not a dead end. Two-column labels are handled: the per-100 g column wins,
-  which is the last column unless the header names "per 100 g" first.
+  which is the last column unless the header names "per 100 g" first. When
+  that column is computed on added water, say so with --basis as_prepared and
+  --basis-note; both need --manual, because no page or API declares a basis.
 
 WHAT A RETAILER PAGE COSTS
   The page budget defaults to 4 (--budget N). It is claimed before the request

@@ -56,12 +56,23 @@ ids normalised at ingress. Pantry supports `coles`, `woolworths`, `afcd`,
 `usda`, `manual`, and `openfoodfacts`.
 Recipes deliberately accepts only its documented resolvable subset.
 
+Nutrients are per 100 g of the product **as sold** unless the record carries
+`basis`, which is `as_sold` or `as_prepared`. Absent means `as_sold`: the
+frozen shards predate the key and are never rewritten to carry a default, so a
+consumer that has never heard of it keeps today's behaviour. An `as_prepared`
+panel was printed for the made-up food, so scaling it by a dry weight is wrong
+by whatever the preparation adds — 47x for a stock cube. `basis_note` is the
+free text that says how to convert instead, such as "per 100 mL prepared;
+1 cube (10.5 g) makes 500 mL". Both keys are surfaced by `lookup` and
+`search`, human output and `--json` alike, and a `basis` that is neither
+value is refused rather than coerced.
+
 JSONL keys have this fixed order, because a one-product edit must remain a
 one-line diff:
 
 ```
-source id name brand kj fat carbs protein fiber sugar kcal url
-serving_size serving_unit total_size total_unit
+source id name brand kj fat carbs protein fiber sugar kcal basis basis_note
+url serving_size serving_unit total_size total_unit
 ```
 
 Optional missing keys are omitted. Unknown keys are preserved after known

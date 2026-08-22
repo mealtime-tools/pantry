@@ -25,6 +25,14 @@ PRODUCT_SOURCES = (
     "manual",
 )
 
+# What a record's nutrients are measured against. Absent is the default and
+# means as-sold: the frozen shards predate the key, and writing a default into
+# them would rewrite a file nothing can regenerate.
+PRODUCT_BASES = (
+    "as_sold",
+    "as_prepared",
+)
+
 # The order keys are written in. The scrape emitted several key orders and no
 # particular record order, which turned an edit to one product into a diff
 # across the whole file. Pinning both is the entire point of storing JSONL.
@@ -40,6 +48,11 @@ PRODUCT_KEYS = (
     "fiber",
     "sugar",
     "kcal",
+    # The basis sits with the figures it qualifies rather than with the
+    # packaging fields, so a line read by eye carries the caveat beside the
+    # numbers it applies to.
+    "basis",
+    "basis_note",
     "url",
     "serving_size",
     "serving_unit",
@@ -93,6 +106,25 @@ def _check_number(product: Product, key: str, optional: bool) -> None:
         raise ProductError(f"{_label(product)} has invalid {key}: {value}")
 
 
+def _check_basis(product: Product) -> None:
+    """Refuse a basis this format does not define.
+
+    Coerced or ignored, an unknown value reads as "no caveat" — which is
+    exactly the silent scaling error the key exists to make visible.
+    """
+    basis = product.get("basis")
+    if basis is not None and basis not in PRODUCT_BASES:
+        raise ProductError(
+            f"{_label(product)} has unsupported basis: {basis!r}"
+        )
+
+    note = product.get("basis_note")
+    if note is not None and not isinstance(note, str):
+        raise ProductError(
+            f"{_label(product)} has a non-text basis_note: {note!r}"
+        )
+
+
 def _label(product: Product) -> str:
     return f"{product.get('source')}:{product.get('id')}"
 
@@ -110,6 +142,8 @@ def assert_product_record(product: Product) -> None:
         _check_number(product, key, optional=False)
     for key in _OPTIONAL_NUMBERS:
         _check_number(product, key, optional=True)
+
+    _check_basis(product)
 
 
 def assert_exportable_product(product: Product) -> None:
