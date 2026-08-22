@@ -22,7 +22,7 @@ from pantry.nutrition import (
     NUTRIENTS,
     nutrients_for_storage,
     parse_amount,
-    parse_panel,
+    panel_from_rows,
 )
 from pantry.products import Product
 
@@ -46,17 +46,6 @@ class ProductRef:
     source: str
     id: str
     url: str
-
-
-def _rows_to_panel(rows: list[tuple[str, str]]) -> dict[str, float]:
-    """Turn a site's nutrient rows into the text a label would have printed.
-
-    The two sites disagree about everything except this: a row is a name and a
-    quantity. Rendering them back into lines lets one parser serve the pages
-    and the panels a user pastes, so a bug fixed for one is fixed for both.
-    """
-    text = "\n".join(f"{name} {value}" for name, value in rows if value)
-    return parse_panel(text)
 
 
 def _coles_site_id(path: str) -> str | None:
@@ -85,7 +74,7 @@ def _read_coles(payload: Any) -> dict[str, Any]:
     return {
         "name": str(product.get("name") or ""),
         "brand": str(product.get("brand") or ""),
-        "panel": _rows_to_panel(rows),
+        "panel": panel_from_rows(rows),
         "serving": nutrition.get("servingSize"),
         "total": product.get("size"),
     }
@@ -115,7 +104,7 @@ def _read_woolworths(payload: Any) -> dict[str, Any]:
     return {
         "name": str(product.get("Name") or ""),
         "brand": str(product.get("Brand") or ""),
-        "panel": _rows_to_panel(rows),
+        "panel": panel_from_rows(rows),
         "serving": information[0].get("ServingSize") if information else None,
         "total": product.get("PackageSize"),
     }
