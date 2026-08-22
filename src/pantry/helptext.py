@@ -25,9 +25,10 @@ NUTRIENTS
   preparation adds -- 47x for a stock cube. Read `basis_note` for the
   conversion instead ("per 100 mL prepared; 1 cube (10.5 g) makes 500 mL").
   Both are shown by search and lookup when present. A basis that is neither
-  value, an empty note, and a note with no basis are all refused -- when a
-  record is read as well as when it is written, because an unrecognised basis
-  would otherwise read as absent, and absent means as-sold.
+  value, an empty note, and a note with no basis are all refused on the way
+  out. Only the basis value is checked on the way in, because an unrecognised
+  one reads as absent and absent means as-sold; the other two are visible in
+  output, and one bad row must never cost the shard it sits in.
 
 PROVIDERS
   local          the frozen shards plus your own. Search. No network.
@@ -114,6 +115,16 @@ ANNOTATE A HELD RECORD
   other field as it was. --basis is required; an absent --basis-note leaves
   whatever the record carried. Emits {"annotated":true,"source":...,"id":...,
   "product":{...}}. An identity that is not held is a refusal, not a fetch.
+
+  --clear-basis-note drops the note a record carries, and is the only way to
+  remove one. Changing the basis of a record that has a note is refused
+  unless one of the two is passed with it: a note explains figures on one
+  basis, so `as_sold` beside "per 100 mL prepared" is worse than no note.
+
+  Unlike add, this checks shape and not plausibility, because it re-measures
+  nothing: a record whose panel today's rules would refuse -- 141 frozen
+  Coles rows, mostly dry goods -- can still be annotated. Warning about one
+  must not require changing its figures.
 
 WHAT A RETAILER PAGE COSTS
   The page budget defaults to 4 (--budget N). It is claimed before the request

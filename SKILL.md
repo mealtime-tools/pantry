@@ -195,6 +195,18 @@ whenever the record exists: `--manual` re-authors it from the panel you paste,
 which is how a wrong field is removed, and also how a pack size the note
 converts from gets lost.
 
+`--clear-basis-note` drops the note a record carries, and is the only way to
+remove one — an empty note is refused. Changing the basis of a record that
+carries a note is refused unless you pass `--basis-note` or
+`--clear-basis-note` with it: a note explains figures on one basis, and
+`as_sold` beside "per 100 mL prepared" is worse than no note at all.
+
+Unlike `add`, this verb checks shape and not plausibility, because it
+re-measures nothing. So a record whose panel today's rules would refuse — 141
+frozen Coles rows, mostly dry goods, are in that state — can still be
+annotated, which is the point: warning about such a record must not require
+changing its figures.
+
 ## What a retailer page costs
 
 - `--budget N` (default 4) is claimed before the request and counted even when
@@ -224,8 +236,10 @@ A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of anything
 per 100 g, three macros totalling more than 105 g per 100 g, a `basis` that is
 neither `as_sold` nor `as_prepared`, an empty `basis_note`, or a `basis_note`
-with no `basis`. The basis rules apply when a record is read as well as when
-it is written.
+with no `basis`. Only the first of those three applies when a record is
+**read**: an unrecognised basis would read as absent, and absent means
+as-sold, while the other two are visible in output. A shard is never failed
+over a mistake you can see in `lookup`.
 
 ## Storage
 

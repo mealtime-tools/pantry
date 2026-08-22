@@ -18,6 +18,7 @@ from pantry.local import Local
 from pantry.products import (
     Product,
     assert_exportable_product,
+    assert_product_record,
     format_jsonl,
     identity,
 )
@@ -91,12 +92,29 @@ class Store:
         return Local(self.all()).find(source, product_id)
 
     def add(self, product: Product) -> None:
-        """Store a product, immediately and durably.
-
-        It lands in the shard named for its source, rewritten whole rather
-        than appended because a shard is sorted with a fixed key order.
-        """
+        """Store a newly acquired product, immediately and durably."""
         assert_exportable_product(product)
+        self._write(product)
+
+    def update(self, product: Product) -> None:
+        """Store an edit to a record this package did not author.
+
+        Shape is checked; plausibility is not. 141 frozen rows fail today's
+        nutrition rules, disproportionately the dry goods whose basis most
+        needs recording, and none can be re-scraped — so refusing to edit one
+        would mean the only way to warn about a record is to change its
+        figures. An edit in place re-measures nothing, which is what makes
+        that safe.
+        """
+        assert_product_record(product)
+        self._write(product)
+
+    def _write(self, product: Product) -> None:
+        """Land a record in the shard named for its source.
+
+        Rewritten whole rather than appended, because a shard is sorted with
+        a fixed key order.
+        """
         source = product["source"]
         shard = self._store / f"{source}.jsonl"
 

@@ -70,12 +70,19 @@ would leave the record structurally claiming as-sold. Both keys are surfaced
 by `lookup` and `search`, human output and `--json` alike.
 
 An unrecognised `basis`, an empty `basis_note` and a note without a basis are
-all refused, on read as well as on write. Reading is the one place this key is
-checked and the numbers are not: every other malformed figure is loud
-downstream, while an unrecognised basis would read as absent, and absent means
-as-sold. `annotate` sets both fields on a record already held, without
-re-authoring its panel, and `add --refresh` carries them across — no provider
-can put back a field only a human could supply.
+all refused when a record is written. An unrecognised `basis` is refused when
+one is *read*, too — the one place this key is checked and the numbers are
+not, because every other malformed figure is loud downstream while an
+unrecognised basis reads as absent, and absent means as-sold. The note rules
+stay on the write path: an empty note, or one with no basis, is already
+visible in `lookup` and `search` output, and failing a whole shard over a
+mistake a reader can see would take every other row down with it.
+
+`annotate` sets both fields on a record already held, without re-authoring its
+panel, and `add --refresh` carries them across — no provider can put back a
+field only a human could supply. It checks shape rather than plausibility: an
+edit in place re-measures nothing, and 141 frozen rows fail today's nutrition
+rules, disproportionately the dry goods whose basis most needs recording.
 
 JSONL keys have this fixed order, because a one-product edit must remain a
 one-line diff:

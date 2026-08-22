@@ -24,6 +24,7 @@ from pantry.products import (
     format_jsonl,
     parse_jsonl,
 )
+from pantry.store import Store
 
 # The stock cube from the issue: 5.5 kcal per 100 mL of made-up stock, not per
 # 100 g of cube. Scaling one 10.5 g cube by the stored figure undercounts 47x.
@@ -299,14 +300,15 @@ def test_a_malformed_basis_is_refused_on_the_way_in(
     """The one key checked on read as well as on write.
 
     An unrecognised value would otherwise fall back to "absent means
-    as-sold", which is the silent undercount the key exists to prevent.
+    as-sold", which is the silent undercount the key exists to prevent. It is
+    the only basis rule enforced on read, because it is the only one a reader
+    cannot see: `test_a_visible_basis_mistake_stays_readable` is the other
+    half of this.
     """
     row = '{"id":"98548","name":"Cubes","brand":"","kcal":5.5,"protein":0,'
 
     with pytest.raises(ProductError, match="line 1"):
         parse_jsonl(row + '"basis":"as-prepared"}\n', source="manual")
-    with pytest.raises(ProductError, match="line 1"):
-        parse_jsonl(row + '"basis_note":["prepared"]}\n', source="manual")
 
     # And through the reader the CLI really uses, on a shard edited by hand.
     store_path.mkdir(parents=True, exist_ok=True)
@@ -317,6 +319,53 @@ def test_a_malformed_basis_is_refused_on_the_way_in(
 
     assert refused.exit_code == 1
     assert "basis" in refused.stderr
+
+
+def test_a_visible_basis_mistake_stays_readable(
+    make_deps, run, store_path
+) -> None:
+    """One bad row must never cost the shard, or the repair cannot run.
+
+    A note with no basis, or an empty one, is already visible in `lookup` and
+    `search` output, so refusing the file it sits in buys nothing and takes
+    every other record down with it — `annotate` included, since finding a
+    record means reading the whole shard first. Round one of this feature
+    could write exactly this row, so it has to stay repairable.
+    """
+    legacy = (
+        '{"id":"legacy","name":"Legacy","brand":"","kcal":5.5,"protein":0,'
+        f'"fat":0,"carbs":0,"basis_note":"{NOTE}"}}\n'
+    )
+    good = (
+        '{"id":"good","name":"Good","brand":"","kcal":100,"protein":5,'
+        '"fat":2,"carbs":10}\n'
+    )
+    store_path.mkdir(parents=True, exist_ok=True)
+    (store_path / "manual.jsonl").write_text(legacy + good, encoding="utf-8")
+
+    # The unrelated record is still reachable, exactly as it is on main.
+    unrelated = run(make_deps(), "lookup", "manual", "good")
+    assert unrelated.exit_code == 0, unrelated.output
+    assert "Good" in unrelated.output
+
+    # The note is visible on the record that carries it, and it can be
+    # repaired in place rather than by hand-editing JSONL.
+    shown = run(make_deps(), "lookup", "manual", "legacy")
+    assert shown.exit_code == 0
+    assert NOTE in shown.output
+
+    repaired = run(
+        make_deps(), "annotate", "manual", "legacy", "--basis", "as_prepared"
+    )
+    assert repaired.exit_code == 0, repaired.output
+    assert f'"basis":"as_prepared","basis_note":"{NOTE}"' in (
+        store_path / "manual.jsonl"
+    ).read_text(encoding="utf-8")
+
+    # Still refused on the way out: the write path is where the note rules
+    # belong, and reading a record is not authoring one.
+    with pytest.raises(ProductError, match="basis_note"):
+        assert_exportable_product({**AS_SOLD, "basis_note": NOTE})
 
 
 def test_annotating_a_held_record_keeps_every_other_field(
@@ -369,6 +418,143 @@ def test_annotate_needs_a_held_record_and_a_basis(make_deps, run) -> None:
     unpaired = run(deps, "annotate", "coles", "98548", "--basis-note", NOTE)
     assert unpaired.exit_code == 1
     assert "--basis" in unpaired.stderr
+
+
+def test_a_note_cannot_outlive_the_basis_it_was_written_for(
+    make_deps, run, store_path
+) -> None:
+    """Re-stating a different basis must not leave the old note behind.
+
+    `as_sold` beside "per 100 mL prepared" is worse than no note at all: a
+    consumer keyed on `basis` scales by the dry weight with the correction
+    printed on the same line.
+    """
+    deps = make_deps(
+        [{**HELD_CUBES, "basis": "as_prepared", "basis_note": NOTE}]
+    )
+
+    refused = run(deps, "annotate", "coles", "98548", "--basis", "as_sold")
+    assert refused.exit_code == 1
+    # Actionable: it names the conflict and the two ways out.
+    assert "basis_note" in refused.stderr
+    assert "--clear-basis-note" in refused.stderr
+    assert not (store_path / "coles.jsonl").exists()
+
+    # Either way out works, and the note is gone rather than contradicted.
+    cleared = run(
+        deps,
+        "annotate",
+        "coles",
+        "98548",
+        "--basis",
+        "as_sold",
+        "--clear-basis-note",
+    )
+    assert cleared.exit_code == 0, cleared.output
+    stored = (store_path / "coles.jsonl").read_text(encoding="utf-8")
+    assert '"basis":"as_sold"' in stored
+    assert "basis_note" not in stored
+
+
+def test_a_note_survives_re_stating_the_same_basis(
+    make_deps, run, store_path
+) -> None:
+    """Absent means "leave it", not "delete it"."""
+    deps = make_deps([HELD_CUBES])
+
+    first = run(
+        deps,
+        "annotate",
+        "coles",
+        "98548",
+        "--basis",
+        "as_prepared",
+        "--basis-note",
+        NOTE,
+    )
+    assert first.exit_code == 0, first.output
+
+    again = run(deps, "annotate", "coles", "98548", "--basis", "as_prepared")
+
+    assert again.exit_code == 0, again.output
+    assert f'"basis":"as_prepared","basis_note":"{NOTE}"' in (
+        store_path / "coles.jsonl"
+    ).read_text(encoding="utf-8")
+    assert "null" not in (store_path / "coles.jsonl").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_clearing_and_setting_a_note_are_exclusive(make_deps, run) -> None:
+    deps = make_deps([HELD_CUBES])
+
+    refused = run(
+        deps,
+        "annotate",
+        "coles",
+        "98548",
+        "--basis",
+        "as_prepared",
+        "--basis-note",
+        NOTE,
+        "--clear-basis-note",
+    )
+
+    assert refused.exit_code == 1
+    assert "cannot be combined" in refused.stderr
+
+
+def test_a_panel_todays_rules_would_refuse_can_still_be_annotated(
+    make_deps, run, store_path, tmp_path
+) -> None:
+    """The rows that most need a basis are the ones strict validation refuses.
+
+    141 frozen Coles rows fail today's nutrition rules, disproportionately dry
+    goods — an instant coffee mix, ginger powder, vermicelli noodles. Their
+    blocking signal, zero energy against non-zero macros on a shelf-stable dry
+    good, is the prepared-basis signal. Refusing to annotate one would mean
+    the only way to warn about it is to change its numbers.
+    """
+    unusable = {
+        "source": "coles",
+        "id": "8409346",
+        "name": "G7 Strong Instant Coffee 3 In 1 Mix",
+        "brand": "G7",
+        "kcal": 0,
+        "protein": 8,
+        "fat": 0,
+        "carbs": 0,
+        "total_size": 320,
+        "total_unit": "g",
+    }
+    deps = make_deps([unusable])
+
+    annotated = run(
+        deps,
+        "annotate",
+        "coles",
+        "8409346",
+        "--basis",
+        "as_prepared",
+        "--basis-note",
+        "per 100 mL prepared; 1 sachet (16 g) makes 150 mL",
+    )
+
+    assert annotated.exit_code == 0, annotated.output
+    stored = (store_path / "coles.jsonl").read_text(encoding="utf-8")
+    # Annotating re-measures nothing: the figures are stored as they were.
+    assert '"protein":8' in stored and '"kcal":0' in stored
+    assert '"basis":"as_prepared"' in stored
+
+    # Acquiring one is still refused: an edit in place is not a new import,
+    # and only the edit is checked for shape alone.
+    with pytest.raises(ProductError, match="zero energy"):
+        assert_exportable_product(unusable)
+
+    store = Store(list, tmp_path / "acquire")
+    with pytest.raises(ProductError, match="zero energy"):
+        store.add(unusable)
+    store.update(unusable)
 
 
 def test_a_refresh_keeps_a_hand_authored_basis(
