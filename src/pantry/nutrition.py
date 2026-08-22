@@ -28,6 +28,30 @@ _QUANTITY = re.compile(
     r"(-?[\d,]+(?:\.\d+)?)\s*(kcal|cal|kj|mg|g|ml)?\b", re.IGNORECASE
 )
 
+# What a panel may write between the sodium row's name and its figure: a unit,
+# a "total" qualifier of the kind `Fat, Total` already uses, or the "less
+# than" a trace amount is printed as. A closed set on purpose -- widening it
+# to any word admits "Sodium Bicarbonate 500".
+_SODIUM_WORDS = r"(?:mg|g|na|total|less\s+than)\b"
+
+# Sodium at the head of the line, then nothing but those words before its own
+# figure. An additive names sodium too -- "Sodium Bicarbonate (500)", "Sodium
+# Nitrite (250)" -- and an additive code sits inside sodium's plausible
+# milligram range, so a figure taken off an ingredient list would pass every
+# later check. The last matching line wins, which is what let a trailing
+# ingredient list overwrite a figure that had already parsed. Sugar survives
+# the same contamination only because the 100 g ceiling refuses it.
+#
+# Leading pipes, dashes and bullets are allowed because a pasted markdown
+# table or a dashed row is a real shape and none of them let a word precede
+# sodium. A row wrapped in markup this does not know -- bold, HTML, quoted
+# CSV -- reads as absent, which is the safe answer: a missing sodium is
+# unknown by contract, a wrong one is not.
+_SODIUM_ROW = re.compile(
+    rf"^[\s|•*>-]*sodium\b(?:[\s(,:|]*{_SODIUM_WORDS})*[\s),:|]*[<\d]",
+    re.IGNORECASE,
+)
+
 # The rows this parser recognizes, in the order it tries them. Sub-rows come
 # first: "- Saturated" would otherwise match the fat row, and "Sugars" and
 # "Dietary Fibre" both sit under carbohydrate on a label.
@@ -44,21 +68,7 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("fiber", re.compile(r"fib(?:re|er)", re.IGNORECASE)),
     # Read, unlike the salt row above it: salt is 2.5 times its sodium, so
     # taking one for the other would overstate the figure by 150 percent.
-    #
-    # Matched at the head of the line and only as far as its own figure,
-    # because an additive names sodium too -- "Sodium Bicarbonate (500)",
-    # "Sodium Nitrite (250)" -- and those codes sit inside sodium's plausible
-    # milligram range. A figure taken off an ingredient list would pass every
-    # later check, and the last matching line is the one that wins. Sugar
-    # survives the same contamination only because the 100 g ceiling refuses
-    # it. A row this does not recognize is absent, which is the safe answer.
-    (
-        "sodium",
-        re.compile(
-            r"^\s*sodium\b[\s(,:]*(?:mg|g|na)?[\s),:]*[<\d]",
-            re.IGNORECASE,
-        ),
-    ),
+    ("sodium", _SODIUM_ROW),
     ("protein", re.compile(r"protein", re.IGNORECASE)),
     ("carbs", re.compile(r"carb", re.IGNORECASE)),
     ("fat", re.compile(r"fat", re.IGNORECASE)),
@@ -301,7 +311,11 @@ def _conflicts_with_zero(key: str, value: float | None) -> bool:
 
     Sodium carries no energy, so a figure for it contradicts nothing: table
     salt is a genuine zero-calorie product with 38,758 mg of it.
-    `assert_usable_sodium` is what checks it instead.
+
+    That exemption swallows an impossible sodium too -- a negative or
+    non-finite one answers False here -- so the caller's
+    `assert_usable_sodium` is the only thing refusing it. That call is
+    load-bearing, not belt-and-braces.
     """
     return value is not None and value != 0 and key != "sodium"
 

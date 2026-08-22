@@ -100,8 +100,17 @@ ADD ONE RECORD
   community data, not proof of current availability.
 
   A Sodium row is read in milligrams, converting a gram figure such as
-  "Sodium 0.4g" to 400. A Salt row is not read at all: salt is 2.5 times its
-  sodium, and reading one as the other would overstate it by 150 percent.
+  "Sodium 0.4g" to 400 and storing a trace bound such as "LESS THAN 5mg" as
+  the bound. A Salt row is not read at all: salt is 2.5 times its sodium, and
+  reading one as the other would overstate it by 150 percent.
+
+  To be read, the row must start its line and be followed by its figure, with
+  nothing between them but a unit, "total" or "less than". A leading |, - or
+  bullet is allowed, so a pasted markdown table works. That rules out an
+  additive -- "Sodium Bicarbonate (500)", whose code looks like a plausible
+  milligram figure -- and also "Total Sodium", "Sodium (as salt)", and a row
+  wrapped in bold or HTML. A declined row is absent from the record rather
+  than guessed at, and nothing warns about it.
 
   --manual reads the panel from stdin and never touches the network; with a
   retailer url it keeps that identity, so a blocked page is a redirection and

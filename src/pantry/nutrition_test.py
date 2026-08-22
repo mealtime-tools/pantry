@@ -5,6 +5,7 @@ import pytest
 from pantry.nutrition import (
     NutritionError,
     assert_usable_nutrients,
+    assert_usable_sodium,
     nutrients_for_storage,
     parse_amount,
     parse_panel,
@@ -134,13 +135,27 @@ Ingredients: Dried Apricots (99%), Preservative (Sodium Metabisulphite 223)
 @pytest.mark.parametrize(
     "line",
     [
-        "Ingredients: Water, Flour, Sodium Bicarbonate (500), Emulsifier"
-        " (471)",
+        "Ingredients: Water, Sodium Bicarbonate (500), Emulsifier (471)",
         "Ingredients: Pork (85%), Sodium Nitrite (250)",
         "Contains Sodium Metabisulphite (223) 0.5g",
         "Low sodium - 30% less than our regular recipe",
         "Ingredients: Flavour Enhancer (monosodium glutamate 0.5g)",
+        # Rejected by the head anchor alone: the figure sits right beside the
+        # word, so nothing else in the pattern is standing in the way.
+        "Ingredients: Water, Flour, sodium 500",
+        "Contains sodium: 500mg per serve",
+        "Preservative (sodium 250)",
+        # Rejected by the closed set of label words alone: no parenthesis
+        # separates the additive name from its code.
+        "Sodium Bicarbonate 500",
+        "Sodium Metabisulphite 223",
+        "Sodium Nitrite 250",
+        # Both guards at once, and the two rows that carry a salt figure
+        # rather than a sodium one.
         "Sodium Bicarbonate (500)",
+        "| Sodium Bicarbonate | 500 |",
+        "Sodium (as salt) 1.0g",
+        "Sodium/Salt 0.9g",
     ],
     ids=[
         "bicarbonate",
@@ -148,7 +163,16 @@ Ingredients: Dried Apricots (99%), Preservative (Sodium Metabisulphite 223)
         "metabisulphite",
         "marketing-claim",
         "monosodium",
+        "lowercase-in-ingredients",
+        "lowercase-after-contains",
+        "lowercase-in-parentheses",
+        "bicarbonate-unparenthesized",
+        "metabisulphite-unparenthesized",
+        "nitrite-unparenthesized",
         "additive-at-line-head",
+        "additive-in-a-table-row",
+        "salt-figure-in-brackets",
+        "salt-figure-after-a-slash",
     ],
 )
 def test_only_the_panel_row_is_read_as_sodium(line: str) -> None:
@@ -173,11 +197,43 @@ def test_an_ingredient_list_never_overwrites_the_panel_row() -> None:
         "Sodium (mg) 355",
         "Sodium, Na 355mg",
         "Sodium: 355 mg",
+        # `Fat, Total` is how the retailer rows really read, and
+        # `_rows_to_panel` renders a name and its value into one line, so the
+        # sibling wording arrives in exactly this shape.
+        "Sodium, total 355mg",
+        "Sodium Total 355mg",
+        "Sodium (total) 355mg",
+        # A pasted markdown table and a dashed row: the shapes an agent
+        # actually hands to `add --manual`.
+        "| Sodium | 355mg |",
+        "- Sodium 355mg",
+        "• Sodium 355mg",
     ],
-    ids=["plain", "indented", "unit-in-label", "qualified", "colon"],
+    ids=[
+        "plain",
+        "indented",
+        "unit-in-label",
+        "qualified",
+        "colon",
+        "total-after-comma",
+        "total-as-a-word",
+        "total-in-brackets",
+        "markdown-table-row",
+        "dashed-row",
+        "bulleted-row",
+    ],
 )
 def test_a_panel_row_is_read_however_the_label_writes_it(row: str) -> None:
     assert parse_panel(row)["sodium"] == 355
+
+
+def test_a_trace_sodium_row_stores_the_bound_the_label_printed() -> None:
+    # A trace amount is written as a bound and the bound is the only figure
+    # the label carries, which is what every other row already does with
+    # "LESS THAN 1.0g". Low-sodium packs are where this wording turns up.
+    assert parse_panel("Sodium LESS THAN 5mg")["sodium"] == 5
+    assert parse_panel("Sodium less than 5 mg")["sodium"] == 5
+    assert parse_panel("Sodium < 5mg")["sodium"] == 5
 
 
 def test_a_salt_row_is_not_read_as_sodium() -> None:
@@ -194,6 +250,28 @@ def test_sodium_beyond_a_hundred_grams_per_hundred_gram_is_refused() -> None:
 
     with pytest.raises(NutritionError, match="sodium"):
         assert_usable_nutrients({**salt, "sodium": 200_000})
+
+
+@pytest.mark.parametrize(
+    "sodium",
+    [-1, -0.0001, float("nan"), float("inf"), float("-inf"), 100_001],
+    ids=["negative", "barely-negative", "nan", "inf", "-inf", "over-ceiling"],
+)
+def test_an_impossible_sodium_figure_is_refused(sodium: float) -> None:
+    with pytest.raises(NutritionError, match="sodium"):
+        assert_usable_sodium({"sodium": sodium})
+
+
+@pytest.mark.parametrize(
+    "sodium",
+    [0, 38758, 100_000, None],
+    ids=["printed-zero", "table-salt", "ceiling", "absent"],
+)
+def test_a_possible_sodium_figure_is_accepted(sodium: float | None) -> None:
+    # The ceiling is inclusive, matching `_check_mass`, and an absent figure
+    # is not an error: this is the check for the paths that carry sodium and
+    # nothing else.
+    assert_usable_sodium({"sodium": sodium})
 
 
 def test_a_zero_calorie_panel_has_its_sodium_checked() -> None:

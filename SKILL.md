@@ -170,8 +170,17 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   for the same barcode would silently overwrite it. Treat it as
   community-maintained data, not proof of current availability.
 - A `Sodium` row is read in the milligrams it prints; a gram figure such as
-  `Sodium 0.4g` becomes 400. A `Salt` row is **not** read, because salt is
-  2.5 times its sodium and reading one as the other would overstate it.
+  `Sodium 0.4g` becomes 400, and a trace bound such as `Sodium LESS THAN 5mg`
+  stores the bound. A `Salt` row is **not** read, because salt is 2.5 times its
+  sodium and reading one as the other would overstate it.
+- To be read, a sodium row must **start its line** and be followed by its
+  figure, with nothing between them but a unit, `total`, or `less than`. A
+  leading `|`, `-` or bullet is fine, so a pasted markdown table works. That
+  rules out an additive -- `Sodium Bicarbonate (500)`, `Sodium Nitrite (250)`,
+  whose codes look exactly like plausible milligram figures -- and it also
+  means `Total Sodium`, `Sodium (as salt)` and a row wrapped in bold or HTML
+  are **not** read. A row Pantry declines is simply absent from the record,
+  with no warning; check the stored record if you expected a sodium figure.
 - `--manual` reads the panel from stdin and never touches the network. It needs
   `--id` and `--name`; `--brand`, `--serving "59g"` and `--total "450g"` are
   optional. Given a retailer url it keeps that identity. Two-column labels are
