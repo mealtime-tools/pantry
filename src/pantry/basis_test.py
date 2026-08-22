@@ -368,6 +368,58 @@ def test_a_visible_basis_mistake_stays_readable(
         assert_exportable_product({**AS_SOLD, "basis_note": NOTE})
 
 
+@pytest.mark.parametrize(
+    "note", ["", 0, False, []], ids=["empty", "zero", "false", "list"]
+)
+def test_a_note_with_no_text_renders_as_no_note(note) -> None:
+    """The read path admits these; neither output may show a dangling note.
+
+    The note rules live on the write path, so a hand-edited shard can carry a
+    note that is present but says nothing. Filtering on emptiness rather than
+    absence keeps both surfaces honest whatever the reader lets through, which
+    is the property that stops a `[as_prepared: ]` or a Python repr reaching a
+    human, and stops `"basis_note":""` reaching a documented result shape.
+    """
+    record = {**PREPARED, "basis_note": note}
+
+    assert describe(record).endswith("(Massel)  [as_prepared]")
+    assert "basis_note" not in as_result(record)
+    assert as_result(record)["basis"] == "as_prepared"
+
+
+# Every shape rule `update` still enforces on a record it did not author.
+# `held` reaches it from `parse_jsonl`, which checks identity and the basis
+# value and nothing else, so this is the floor under `annotate`.
+MALFORMED = {
+    "non-numeric kcal": {"kcal": "banana"},
+    "negative kcal": {"kcal": -1},
+    "missing kcal": {"kcal": None},
+    "numeric id": {"id": 98548},
+    "unsupported source": {"source": "aldi"},
+    "missing name": {"name": None},
+    "unsupported basis": {"basis": "prepared"},
+    "empty note": {"basis": "as_prepared", "basis_note": "  "},
+    "note with no basis": {"basis": None, "basis_note": NOTE},
+}
+
+
+@pytest.mark.parametrize("broken", MALFORMED.values(), ids=list(MALFORMED))
+def test_an_edit_in_place_is_still_checked_for_shape(tmp_path, broken) -> None:
+    """`update` drops plausibility, not shape.
+
+    Without this floor a hand-edited shard would reach the writer intact: a
+    record whose kcal is the string "banana" round-trips through the reader,
+    and the failure lands wherever something first tries arithmetic on it.
+    """
+    store = Store(list, tmp_path)
+    record = {**HELD_CUBES, "basis": "as_prepared", **broken}
+
+    with pytest.raises(ProductError):
+        store.update({k: v for k, v in record.items() if v is not None})
+
+    assert not (tmp_path / "coles.jsonl").exists()
+
+
 def test_annotating_a_held_record_keeps_every_other_field(
     make_deps, run, store_path
 ) -> None:
