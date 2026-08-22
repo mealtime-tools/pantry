@@ -174,13 +174,17 @@ The reference decides the provider. `data` is `{"stored":bool,"reason":
   stores the bound. A `Salt` row is **not** read, because salt is 2.5 times its
   sodium and reading one as the other would overstate it.
 - To be read, a sodium row must **start its line** and be followed by its
-  figure, with nothing between them but a unit, `total`, or `less than`. A
-  leading `|`, `-` or bullet is fine, so a pasted markdown table works. That
-  rules out an additive -- `Sodium Bicarbonate (500)`, `Sodium Nitrite (250)`,
-  whose codes look exactly like plausible milligram figures -- and it also
-  means `Total Sodium`, `Sodium (as salt)` and a row wrapped in bold or HTML
-  are **not** read. A row Pantry declines is simply absent from the record,
-  with no warning; check the stored record if you expected a sodium figure.
+  figure, with nothing between them but `mg`, `na`, `total` or `less than`. A
+  leading `|`, a hyphen (`-`, not an en dash) or a bullet is fine, so a pasted
+  markdown table works. That rules out an additive -- `Sodium Bicarbonate
+  (500)`, `Sodium Nitrite (250)`, whose codes look exactly like plausible
+  milligram figures -- and it also means `Total Sodium`, `Sodium (as salt)` and
+  a row wrapped in bold or HTML are **not** read.
+- `Sodium (g) 0.4` is **not** read either, deliberately: only a unit written on
+  the figure can be converted, so reading a unit that sits beside the name
+  would store `0.4` mg where 400 was printed. Write it as `Sodium 0.4g`.
+- A row Pantry declines is simply absent from the record, with no warning.
+  Check the stored record if you expected a sodium figure.
 - `--manual` reads the panel from stdin and never touches the network. It needs
   `--id` and `--name`; `--brand`, `--serving "59g"` and `--total "450g"` are
   optional. Given a retailer url it keeps that identity. Two-column labels are

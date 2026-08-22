@@ -105,12 +105,17 @@ ADD ONE RECORD
   reading one as the other would overstate it by 150 percent.
 
   To be read, the row must start its line and be followed by its figure, with
-  nothing between them but a unit, "total" or "less than". A leading |, - or
-  bullet is allowed, so a pasted markdown table works. That rules out an
-  additive -- "Sodium Bicarbonate (500)", whose code looks like a plausible
-  milligram figure -- and also "Total Sodium", "Sodium (as salt)", and a row
-  wrapped in bold or HTML. A declined row is absent from the record rather
-  than guessed at, and nothing warns about it.
+  nothing between them but "mg", "na", "total" or "less than". A leading |, a
+  hyphen (not an en dash) or a bullet is allowed, so a pasted markdown table
+  works. That rules out an additive -- "Sodium Bicarbonate (500)", whose code
+  looks like a plausible milligram figure -- and also "Total Sodium", "Sodium
+  (as salt)", and a row wrapped in bold or HTML.
+
+  "Sodium (g) 0.4" is not read either, deliberately: only a unit written on
+  the figure can be converted, so reading one that sits beside the name would
+  store 0.4 mg where 400 was printed. Write it as "Sodium 0.4g". A declined
+  row is absent from the record rather than guessed at, and nothing warns
+  about it.
 
   --manual reads the panel from stdin and never touches the network; with a
   retailer url it keeps that identity, so a blocked page is a redirection and

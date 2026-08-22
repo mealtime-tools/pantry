@@ -3,6 +3,7 @@
 import pytest
 
 from pantry.nutrition import (
+    _SODIUM_ROW,
     NutritionError,
     assert_usable_nutrients,
     assert_usable_sodium,
@@ -150,6 +151,9 @@ Ingredients: Dried Apricots (99%), Preservative (Sodium Metabisulphite 223)
         "Sodium Bicarbonate 500",
         "Sodium Metabisulphite 223",
         "Sodium Nitrite 250",
+        # Rejected by the closed set of separators alone: a word may not
+        # precede one of the label words either.
+        "Sodium Bicarbonate mg 500",
         # Both guards at once, and the two rows that carry a salt figure
         # rather than a sodium one.
         "Sodium Bicarbonate (500)",
@@ -169,6 +173,7 @@ Ingredients: Dried Apricots (99%), Preservative (Sodium Metabisulphite 223)
         "bicarbonate-unparenthesized",
         "metabisulphite-unparenthesized",
         "nitrite-unparenthesized",
+        "word-before-a-label-word",
         "additive-at-line-head",
         "additive-in-a-table-row",
         "salt-figure-in-brackets",
@@ -208,6 +213,12 @@ def test_an_ingredient_list_never_overwrites_the_panel_row() -> None:
         "| Sodium | 355mg |",
         "- Sodium 355mg",
         "• Sodium 355mg",
+        "* Sodium 355mg",
+        "> Sodium 355mg",
+        # Two label words in one row, which is what makes the repetition in
+        # the pattern do any work.
+        "Sodium, total (mg) 355",
+        "Sodium, total, mg, 355",
     ],
     ids=[
         "plain",
@@ -221,6 +232,10 @@ def test_an_ingredient_list_never_overwrites_the_panel_row() -> None:
         "markdown-table-row",
         "dashed-row",
         "bulleted-row",
+        "starred-row",
+        "quoted-row",
+        "total-then-unit",
+        "total-then-unit-comma-separated",
     ],
 )
 def test_a_panel_row_is_read_however_the_label_writes_it(row: str) -> None:
@@ -234,6 +249,29 @@ def test_a_trace_sodium_row_stores_the_bound_the_label_printed() -> None:
     assert parse_panel("Sodium LESS THAN 5mg")["sodium"] == 5
     assert parse_panel("Sodium less than 5 mg")["sodium"] == 5
     assert parse_panel("Sodium < 5mg")["sodium"] == 5
+
+
+@pytest.mark.parametrize(
+    "row", ["Sodium (g) 0.4", "Sodium g 0.4"], ids=["bracketed", "bare"]
+)
+def test_a_row_whose_unit_is_beside_its_name_is_declined(row: str) -> None:
+    # `_read_sodium` can only see the unit attached to the figure, so reading
+    # this row would store 0.4 mg where 400 was printed -- a plausible-looking
+    # number, wrong by a thousand, that no later check can catch. Declined
+    # instead: absent means unknown, and unknown is recoverable.
+    assert "sodium" not in parse_panel(row)
+
+    # The same figure with its unit on the number is still read.
+    assert parse_panel("Sodium 0.4g")["sodium"] == 400
+
+
+def test_the_sodium_row_pattern_never_reaches_across_a_line() -> None:
+    # Reaching for the pattern itself, because the property belongs to it and
+    # not to `parse_panel`, which only ever hands it one line. A later caller
+    # that ran it over a whole label would otherwise read the next row's
+    # number as this row's figure.
+    assert _SODIUM_ROW.search("Sodium\n355mg") is None
+    assert _SODIUM_ROW.search("Sodium less\nthan 5mg") is None
 
 
 def test_a_salt_row_is_not_read_as_sodium() -> None:

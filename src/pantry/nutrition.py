@@ -28,11 +28,30 @@ _QUANTITY = re.compile(
     r"(-?[\d,]+(?:\.\d+)?)\s*(kcal|cal|kj|mg|g|ml)?\b", re.IGNORECASE
 )
 
-# What a panel may write between the sodium row's name and its figure: a unit,
-# a "total" qualifier of the kind `Fat, Total` already uses, or the "less
-# than" a trace amount is printed as. A closed set on purpose -- widening it
-# to any word admits "Sodium Bicarbonate 500".
-_SODIUM_WORDS = r"(?:mg|g|na|total|less\s+than)\b"
+# Whitespace that is not a line break. A row is read off one line, and a
+# pattern able to reach across one would take the next row's number as this
+# row's figure the day someone runs it over a whole label.
+_SPACE = r"[^\S\n]"
+
+# What a panel may write between the sodium row's name and its figure: the
+# unit, the "Na" or "total" qualifier of the kind `Fat, Total` already uses,
+# or the "less than" a trace amount is printed as. A closed set on purpose --
+# widening it to any word admits "Sodium Bicarbonate 500".
+#
+# `g` is deliberately not one of them. `_read_sodium` can only convert the
+# unit attached to the figure, so "Sodium (g) 0.4" would store 0.4 mg where
+# 400 was printed: a plausible number, wrong by a thousand, that no later
+# check can catch. "Sodium 0.4g" still converts, because there the unit is on
+# the number.
+_SODIUM_WORDS = rf"(?:mg|na|total|less{_SPACE}+than)\b"
+
+# The markup a label may put before the row, and the punctuation it may put
+# on either side of one of those words. Leading pipes, dashes and bullets are
+# allowed because a pasted markdown table or a dashed row is a real shape,
+# and none of them let a word precede sodium.
+_BEFORE_ROW = rf"(?:{_SPACE}|[|•*>-])*"
+_BEFORE_WORD = rf"(?:{_SPACE}|[(,:|])*"
+_AFTER_WORD = rf"(?:{_SPACE}|[),:|])*"
 
 # Sodium at the head of the line, then nothing but those words before its own
 # figure. An additive names sodium too -- "Sodium Bicarbonate (500)", "Sodium
@@ -42,13 +61,12 @@ _SODIUM_WORDS = r"(?:mg|g|na|total|less\s+than)\b"
 # ingredient list overwrite a figure that had already parsed. Sugar survives
 # the same contamination only because the 100 g ceiling refuses it.
 #
-# Leading pipes, dashes and bullets are allowed because a pasted markdown
-# table or a dashed row is a real shape and none of them let a word precede
-# sodium. A row wrapped in markup this does not know -- bold, HTML, quoted
-# CSV -- reads as absent, which is the safe answer: a missing sodium is
-# unknown by contract, a wrong one is not.
+# A row wrapped in markup this does not know -- bold, HTML, quoted CSV -- and
+# one whose label this does not recognize both read as absent, which is the
+# safe answer: a missing sodium is unknown by contract, a wrong one is not.
 _SODIUM_ROW = re.compile(
-    rf"^[\s|•*>-]*sodium\b(?:[\s(,:|]*{_SODIUM_WORDS})*[\s),:|]*[<\d]",
+    rf"^{_BEFORE_ROW}sodium\b(?:{_BEFORE_WORD}{_SODIUM_WORDS})*"
+    rf"{_AFTER_WORD}[<\d]",
     re.IGNORECASE,
 )
 
