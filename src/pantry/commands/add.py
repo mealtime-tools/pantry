@@ -9,11 +9,12 @@ check what is already held, and only then let a provider spend anything.
 import click
 from agentcli import UsageError, emit, json_option
 
+from nutrition.figures import read_rows
+
 from pantry.commands.describe import describe
 from pantry.ids import normalize_id
 from pantry.nutrition import (
     nutrients_for_storage,
-    panel_from_rows,
     parse_amount,
     parse_panel,
 )
@@ -358,7 +359,7 @@ def _manual_record(
     # A stated row needs none of a pasted panel's guesswork: no column to
     # choose, no name to find in a line, and its unit is written down.
     figures = (
-        panel_from_rows(_stated_rows(nutrients))
+        read_rows(_stated_rows(nutrients))
         if nutrients
         else parse_panel(state.read_stdin(optional=zero_calorie))
     )

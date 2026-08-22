@@ -2,7 +2,12 @@
 
 from typing import Any
 
-_MACROS = (("kcal", "kcal"), ("protein", "p"), ("carbs", "c"), ("fat", "f"))
+_MACROS = (
+    ("kcal", "kcal"),
+    ("protein", "p"),
+    ("carbohydrates", "c"),
+    ("fat", "f"),
+)
 
 
 def _caveat(product: dict[str, Any]) -> str:

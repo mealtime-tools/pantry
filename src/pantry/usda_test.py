@@ -38,7 +38,7 @@ def test_nutrients_are_read_per_hundred_grams_not_per_serving() -> None:
     assert product["kcal"] == 367.0
     assert product["protein"] == 33.33
     assert product["fat"] == 3.33
-    assert product["carbs"] == 50.0
+    assert product["carbohydrates"] == 50.0
     # The serving figures are a third of these; reading them would be silent.
     assert product["protein"] != 10.0
 
@@ -48,7 +48,7 @@ def test_sodium_is_converted_from_the_milligrams_usda_publishes() -> None:
     assert to_product(BRANDED)["sodium"] == 0.017
 
     # The grams the API already publishes are carried untouched beside it.
-    assert to_product(BRANDED)["fiber"] == 6.7
+    assert to_product(BRANDED)["dietary_fiber"] == 6.7
 
 
 def test_identity_brand_and_url_come_from_the_record() -> None:
@@ -73,7 +73,7 @@ def test_an_absent_macro_stays_absent_rather_than_becoming_zero() -> None:
 
     assert product["protein"] == 5.0
     assert "fat" not in product
-    assert "carbs" not in product
+    assert "carbohydrates" not in product
 
 
 def _with_protein(amount: object) -> dict:
@@ -168,7 +168,7 @@ def test_a_held_record_is_not_re_requested(make_deps, run) -> None:
         "kcal": 1.0,
         "protein": 0.0,
         "fat": 0.0,
-        "carbs": 0.0,
+        "carbohydrates": 0.0,
     }
     deps = make_deps([held])
 

@@ -5,14 +5,16 @@ by `grams / 100` at the point of display, and storing a pre-scaled value or a
 second unit would make editing an amount wrong in a way no test would catch.
 
 Structural fields are enumerated because each is validated in its own way.
-Energy and the four macros are enumerated because they are cross-checked
+Energy and the three macros are enumerated because they are cross-checked
 against each other. Every other nutrient is open, governed by the vocabulary
-in `pantry.nutrition`.
+the mealtime tools share.
 """
 
 import json
 import math
 from typing import Any
+
+from nutrition import energy
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
@@ -58,10 +60,15 @@ PRODUCT_KEYS = (
     "total_unit",
 )
 
-# Energy and the four macros, written next. Enumerated where the vocabulary
+# Energy and the three macros, written next. Enumerated where the vocabulary
 # nutrients are not, because these are the figures cross-checked against each
-# other and against the 100 g the panel describes.
-CORE_NUTRIENTS = ("kcal", "kj", "protein", "fat", "carbs")
+# other and against the 100 g the panel describes. The macro names and their
+# order come from the shared vocabulary, so a rename there is a rename here.
+CORE_NUTRIENTS = ("kcal", "kj", *energy.KCAL_PER_GRAM)
+
+# The figures every record carries, so a consumer may default them. `kj` is
+# absent: it is stored only when a label printed it.
+CORE_FIGURES = ("kcal", *energy.KCAL_PER_GRAM)
 
 # Written last, after the figures they qualify, so a line read by eye carries
 # the caveat beside the numbers it applies to.
@@ -69,7 +76,7 @@ BASIS_KEYS = ("basis", "basis_note")
 
 Product = dict[str, Any]
 
-_REQUIRED_NUMBERS = ("kcal", "protein", "fat", "carbs")
+_REQUIRED_NUMBERS = CORE_FIGURES
 
 # Figures that may be absent and are not nutrients, so the vocabulary rules do
 # not apply: `kj` is stored only when a label printed it, and a pack size is a
@@ -174,9 +181,11 @@ def record_keys(product: Product) -> tuple[str, ...]:
 def assert_product_record(product: Product) -> None:
     """Structural checks only, safe for the frozen historical Coles rows.
 
-    141 of those rows fail today's stricter nutrition rules and none of them
-    can be re-scraped, so the shard is validated for shape and not for
-    plausibility.
+    141 of those rows fail today's stricter nutrition rules and 635 of the
+    11,885 cannot account for their own stated energy. None of them can be
+    re-scraped, so the shard is validated for shape and not for plausibility;
+    `assert_exportable_product` is where the plausibility rules run, and it is
+    only ever reached by a record something is authoring.
     """
     assert_identity(product)
     _check_keys(product)

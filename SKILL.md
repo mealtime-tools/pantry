@@ -84,12 +84,15 @@ visible. Do this before anything remote, every time.
 
 Each result is `{"id","name","title","nutrients":{...},"serving":{"size",
 "unit"},"url","source"}`, plus `basis` and `basis_note` when the record carries
-them. `nutrients` always carries `kcal`, `protein`, `fat` and `carbs`, missing
-ones as 0. Every other nutrient — today `fiber`, `sodium`, `sugar` — appears
-only when the record holds it, because a defaulted 0 would read as a product
-free of that nutrient rather than one that never stated it. Check for the key
-before reading it. `serving` may be `{}`, and `url` is absent when the record
-has none. This is a search-result shape, not a stored record.
+them. `nutrients` always carries `kcal`, `protein`, `fat` and `carbohydrates`,
+missing ones as 0. Every other nutrient — `dietary_fiber`, `sodium`, `sugar`,
+`saturated_fat` and the rest of the shared vocabulary — appears only when the
+record holds it, because a defaulted 0 would read as a product free of that
+nutrient rather than one that never stated it. Check for the key before
+reading it. Stored keys are the canonical names, which are the Google Health
+API's lowercased, so read `carbohydrates` and `dietary_fiber` and not `carbs`
+or `fiber`; what you *write* may use any spelling a label does. `serving` may
+be `{}`, and `url` is absent when the record has none. This is a search-result shape, not a stored record.
 
 ## Exact lookup
 
@@ -238,9 +241,18 @@ energy printed beside a sugar figure is a half-parsed panel.
 
 A record is also refused for: no usable energy, more energy than pure fat
 (900 kcal/100 g), a negative or non-finite figure, more than 100 g of any
-nutrient per 100 g, three macros totalling more than 105 g per 100 g, a
-nutrient name outside the vocabulary, or a `basis` that is neither `as_sold`
-nor `as_prepared`. The basis is the one of those also
+nutrient per 100 g, three macros totalling more than 105 g per 100 g, macros
+that cannot account for the stated energy, a nutrient name outside the
+vocabulary, or a `basis` that is neither `as_sold` nor `as_prepared`.
+
+The energy check is `protein × 4 + fat × 9 + carbohydrates × 4` against the
+stated calories, within 15% under or 10% over. It catches two columns read
+from two different places, where every figure is plausible on its own. It also
+refuses the foods Atwater under-counts by design — dried legumes, whose fibre
+an AU label excludes from carbohydrate, and anything alcoholic. 635 of the
+11,885 bundled rows are in that class, which is why the check runs only on the
+way in and never over the frozen data. Do not work around it by editing
+macros; correct the energy figure or leave the product out. The basis is the one of those also
 checked when a record is **read**: an unrecognised value would read as absent,
 and absent means as-sold. `basis_note` is free text and is not checked at all;
 a shard is never failed over a mistake you can see in `lookup`.

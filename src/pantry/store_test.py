@@ -8,26 +8,28 @@ from pantry.data import data_dir
 from pantry.open_food_facts import cache_dir
 from pantry.store import Store, store_dir
 
+# 1 g each of protein, fat and carbohydrate is 17 kcal, so these rows account
+# for their own energy: `Store.add` reconciles a record before writing it.
 BASE = [
     {
         "source": "coles",
         "id": "1",
         "name": "One",
         "brand": "",
-        "kcal": 100.0,
+        "kcal": 17.0,
         "protein": 1.0,
         "fat": 1.0,
-        "carbs": 1.0,
+        "carbohydrates": 1.0,
     },
     {
         "source": "coles",
         "id": "2",
         "name": "Two",
         "brand": "",
-        "kcal": 100.0,
+        "kcal": 17.0,
         "protein": 1.0,
         "fat": 1.0,
-        "carbs": 1.0,
+        "carbohydrates": 1.0,
     },
 ]
 
@@ -44,10 +46,10 @@ def test_a_record_lands_in_the_shard_named_for_its_source(
             "id": "loaf",
             "name": "Loaf",
             "brand": "",
-            "kcal": 100.0,
+            "kcal": 17.0,
             "protein": 1.0,
             "fat": 1.0,
-            "carbs": 1.0,
+            "carbohydrates": 1.0,
         }
     )
 

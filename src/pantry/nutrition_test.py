@@ -1,10 +1,16 @@
-"""Rules 5, 6 and 11: what a label says, and what is refused."""
+"""Rules 5, 6 and 11: what a label says, and what is refused.
+
+Reading a structured row is the shared library's, and its own suite pins it
+against the same Coles panel; what is left here is the pasted label, the two
+ceilings and the zero-calorie declaration.
+"""
 
 import pytest
+from nutrition.energy import EnergyError
+from nutrition.units import UnknownUnitError
 
 from pantry.nutrition import (
     NutritionError,
-    panel_from_rows,
     assert_usable_nutrients,
     nutrients_for_storage,
     parse_amount,
@@ -42,7 +48,7 @@ def test_per_hundred_gram_column_wins(label: str) -> None:
     # under-count every recipe using the product by about 60 percent.
     assert panel["protein"] == 9.5
     assert panel["fat"] == 3.4
-    assert panel["carbs"] == 39.2
+    assert panel["carbohydrates"] == 39.2
 
     # Kilojoules are kept as printed, and calories derived rather than guessed.
     assert panel["kj"] == 1000
@@ -56,7 +62,7 @@ def test_per_hundred_gram_column_wins(label: str) -> None:
         "Energy 1000kJ\nFat, Total 3.4g\nCarbohydrate 39.2g",
         "Energy 1000kJ\nProtein 9.5g\nFat 3.4g\nCarbohydrate 900g",
     ],
-    ids=["no-energy", "no-protein", "impossible-carbs"],
+    ids=["no-energy", "no-protein", "impossible-carbohydrates"],
 )
 def test_malformed_panel_is_refused_not_zeroed(label: str) -> None:
     panel = parse_panel(label)
@@ -81,7 +87,7 @@ def test_zero_calorie_conflicts_with_any_non_zero_value() -> None:
         "kcal": 0,
         "protein": 0,
         "fat": 0,
-        "carbs": 0,
+        "carbohydrates": 0,
     }
 
 
@@ -167,8 +173,9 @@ def test_a_sodium_row_is_stored_in_the_grams_every_nutrient_uses(
 def test_only_the_panel_row_is_read_as_sodium(line: str) -> None:
     # A row this declines is absent from the record, which is recoverable in a
     # way a wrong figure is not. The whole dict is asserted rather than the
-    # sodium key alone: "Sodium Bicarbonate" matches the *carbs* pattern on
-    # "bicarbonate", and a previous attempt shipped {"carbs": 471.0} because
+    # sodium key alone: "Sodium Bicarbonate" matches the *carbohydrates*
+    # pattern on "bicarbonate", and a previous attempt shipped
+    # {"carbohydrates": 471.0} because
     # every test here looked only at .get("sodium").
     assert parse_panel(line) == {}
 
@@ -192,8 +199,9 @@ def test_an_ingredient_list_never_overwrites_the_panel_row() -> None:
     assert panel["sodium"] == 0.01
 
     # And a line naming sodium is still skipped whole, which is what keeps
-    # "Sodium Bicarbonate" out of the carbs row it matches on "bicarbonate".
-    assert panel["carbs"] == 57.8
+    # "Sodium Bicarbonate" out of the carbohydrates row it matches on
+    # "bicarbonate".
+    assert panel["carbohydrates"] == 57.8
 
 
 def test_a_zero_calorie_panel_may_still_carry_sodium() -> None:
@@ -206,7 +214,7 @@ def test_a_zero_calorie_panel_may_still_carry_sodium() -> None:
         "kcal": 0,
         "protein": 0,
         "fat": 0,
-        "carbs": 0,
+        "carbohydrates": 0,
         "sodium": 38.758,
     }
 
@@ -265,15 +273,17 @@ def test_an_amount_needs_both_a_number_and_a_unit(written, expected) -> None:
 @pytest.mark.parametrize(
     "line",
     ["Sodium 355", "Dietary Fibre 4.1", "Sugars 2.2"],
-    ids=["sodium", "fiber", "sugar"],
+    ids=["sodium", "dietary-fiber", "sugar"],
 )
 def test_a_nutrient_figure_without_a_unit_is_refused(line: str) -> None:
     """1000x apart, so a bare figure is a guess between two answers.
 
     A macro is only printed in grams, so it needs no unit; every nutrient
-    that can be printed in milligrams does.
+    that can be printed in milligrams does. The rule is the shared library's,
+    and so is the refusal: restating it as a `NutritionError` would mean two
+    messages for one rule.
     """
-    with pytest.raises(NutritionError, match="with no unit"):
+    with pytest.raises(UnknownUnitError, match="with no unit"):
         parse_panel(line)
 
 
@@ -281,61 +291,48 @@ def test_a_macro_needs_no_unit() -> None:
     assert parse_panel("Protein 8.5\nFat 3.6") == {"protein": 8.5, "fat": 3.6}
 
 
-COLES_ROWS = [
-    ("Energy", "980kJ"),
-    ("Protein", "8.5g"),
-    ("Fat, Total", "3.6g"),
-    ("- Saturated", "0.6g"),
-    ("Carbohydrate", "38.4g"),
-    ("- Sugars", "2.2g"),
-    ("Dietary Fibre", "4.1g"),
-    ("Sodium", "400mg"),
-]
+# A real shape: the energy of a fried snack against the macros of a plain one,
+# which is what reading two columns from two different places produces.
+MISMATCHED = """
+Energy       2960kJ
+Protein      5.1g
+Fat, Total   20.3g
+Carbohydrate 64.3g
+"""
 
 
-def test_structured_rows_read_a_whole_panel() -> None:
-    assert panel_from_rows(COLES_ROWS) == {
-        "kcal": 234.22588,
-        "kj": 980.0,
-        "protein": 8.5,
-        "fat": 3.6,
-        "carbs": 38.4,
-        "sugar": 2.2,
-        "fiber": 4.1,
-        "sodium": 0.4,
-    }
+def test_a_panel_whose_macros_cannot_account_for_its_energy_is_refused() -> (
+    None
+):
+    """The mistake the mass ceiling cannot see.
 
-
-@pytest.mark.parametrize(
-    ("name", "value"),
-    [("Sodium", "400mg"), ("Sodium (mg)", "400"), ("Sodium mg", "400")],
-    ids=["unit-on-figure", "unit-in-name", "bare-unit-in-name"],
-)
-def test_a_structured_row_takes_its_unit_from_wherever_it_is_stated(
-    name: str, value: str
-) -> None:
-    """The unit is information the source handed over; using it beats guessing.
-
-    A pasted label can only put the unit beside the figure. A structured row
-    can put it in either place, and "Sodium (g) 0.4" read as milligrams is
-    wrong by a thousand.
+    Every figure here is plausible on its own and the three macros are only
+    90 g per 100 g, so nothing structural is wrong: the panel simply describes
+    two different foods. 553 rows of the frozen Coles shard are this shape and
+    were stored silently.
     """
-    assert panel_from_rows([(name, value)]) == {"sodium": 0.4}
-    assert panel_from_rows([("Sodium (g)", "0.4")]) == {"sodium": 0.4}
+    panel = parse_panel(MISMATCHED)
+
+    assert panel["kcal"] == pytest.approx(707.5, abs=0.1)
+    with pytest.raises(EnergyError, match="contradicts"):
+        assert_usable_nutrients(panel)
 
 
-def test_a_structured_row_with_no_unit_anywhere_is_refused() -> None:
-    with pytest.raises(NutritionError, match="with no unit"):
-        panel_from_rows([("Sodium", "400")])
+def test_a_panel_that_states_only_some_macros_is_refused_for_that_instead() -> (
+    None
+):
+    """Two of three can account for anything, so the check must not fire.
+
+    The library returns early on a partial set rather than guessing, which
+    would make the missing-macro refusal below unreachable and report the
+    wrong reason for it.
+    """
+    panel = parse_panel("Energy 2960kJ\nProtein 5.1g\nFat, Total 20.3g")
+
+    with pytest.raises(NutritionError, match="no carbohydrates"):
+        assert_usable_nutrients(panel)
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["Sodium Bicarbonate", "Ingredients", "Salt", "Sodium (as salt)"],
-    ids=["additive", "ingredient-list", "salt", "salt-restated"],
-)
-def test_a_structured_row_that_names_no_nutrient_is_not_read(
-    name: str,
-) -> None:
-    """Nothing here has to be told apart from prose: the source named it."""
-    assert panel_from_rows([(name, "500")]) == {}
+def test_a_zero_calorie_declaration_is_not_an_atwater_claim() -> None:
+    """Nothing to reconcile: an all-zero panel accounts for its own zero."""
+    assert nutrients_for_storage({}, zero_calorie=True)["kcal"] == 0

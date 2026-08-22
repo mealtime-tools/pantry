@@ -19,7 +19,7 @@ def test_json_emits_exactly_one_object_with_the_documented_exit_codes(
         "kcal": 239.0,
         "protein": 9.5,
         "fat": 3.4,
-        "carbs": 39.2,
+        "carbohydrates": 39.2,
     }
     deps = make_deps([held])
 
@@ -120,7 +120,7 @@ def test_a_stated_panel_needs_no_paste_and_no_guessing(make_deps, run) -> None:
         "-n",
         "fat=0.35g",
         "-n",
-        "carbs=0.53g",
+        "carbohydrates=0.53g",
         "-n",
         "sodium=1775mg",
     )

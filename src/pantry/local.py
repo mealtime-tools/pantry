@@ -16,7 +16,7 @@ from rapidfuzz import fuzz, process
 
 from pantry.ids import id_sort_key
 from pantry.nutrition import NUTRIENTS
-from pantry.products import PRODUCT_SOURCES, Product
+from pantry.products import CORE_FIGURES, PRODUCT_SOURCES, Product
 
 # Below this, a word pair is a coincidence rather than a spelling variant.
 # "yogurt" against "yoghurt" scores 92, which is the case that sets the floor.
@@ -55,10 +55,7 @@ def as_result(product: Product) -> dict:
     # for a shard row read without validation. Every other nutrient is carried
     # only when the record holds it: a defaulted 0 would read as a product free
     # of that nutrient rather than one that never stated it.
-    nutrients = {
-        key: product.get(key) or 0
-        for key in ("kcal", "protein", "fat", "carbs")
-    }
+    nutrients = {key: product.get(key) or 0 for key in CORE_FIGURES}
     nutrients.update(
         {k: product[k] for k in NUTRIENTS if product.get(k) is not None}
     )

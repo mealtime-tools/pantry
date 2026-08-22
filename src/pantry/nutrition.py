@@ -5,30 +5,35 @@ of it is a label written for humans: two columns, trace amounts written as a
 bound, energy in kilojoules, milligrams for the minerals, sub-rows indented
 under their parent. This is where that becomes numbers, and where a panel that
 did not parse is refused.
+
+What a nutrient is called, what unit it is written in and how much energy it
+carries all live in `nutrition`, the domain the mealtime tools share. What is
+left here is the part that is about a per-100 g product record: the two
+ceilings, the zero-calorie declaration, and the column and layout heuristics a
+pasted label needs and a structured row does not.
 """
 
 import math
 import re
 from typing import Any
 
-_KJ_PER_KCAL = 0.239006
+from nutrition import energy, figures, vocabulary
 
-# A label prints its mineral rows in milligrams; a record holds grams. This is
-# the only place the two units meet, because it is the only place a unit is
-# read off a human-written line.
-_MG_PER_G = 1000
-
-# Every nutrient a record may carry beyond energy and the four macros, mapped
-# to whether the figure implies food energy. Adding one is this single line:
-# the write order sorts it, and every check treats it like its neighbours. A
-# name absent from here is refused rather than stored, because a misspelled key
-# stores cleanly and then no consumer ever finds the nutrient again.
-NUTRIENTS = {"fiber": True, "sodium": False, "sugar": True}
+# Every nutrient a record may carry beyond energy and the three macros, taken
+# from the shared vocabulary rather than listed again. The macros are excluded
+# because they are enumerated in `products` and cross-checked against each
+# other; everything else is governed by one rule and sorts alphabetically, so
+# the vocabulary growing changes nothing here.
+NUTRIENTS = tuple(
+    key for key in vocabulary.NUTRIENTS if key not in energy.KCAL_PER_GRAM
+)
 
 # The nutrients a confirmed zero-energy record may still hold. A mineral has no
 # calories, so table salt is a genuine 0 kcal record with 38.758 g of sodium;
 # a sugar figure beside a zero energy is a half-parsed panel.
-CALORIE_FREE = tuple(key for key, energy in NUTRIENTS.items() if not energy)
+CALORIE_FREE = tuple(
+    key for key in NUTRIENTS if not vocabulary.carries_energy(key)
+)
 
 # No food exceeds pure fat, which is 900 kcal per 100 g.
 _MAX_KCAL_PER_100G = 900
@@ -36,9 +41,9 @@ _MAX_KCAL_PER_100G = 900
 # Rounding on a label lets the three macros total slightly over 100 g.
 _MASS_TOLERANCE = 105
 
-_QUANTITY = re.compile(
-    r"(-?[\d,]+(?:\.\d+)?)\s*(kcal|cal|kj|mg|g|ml)?\b", re.IGNORECASE
-)
+# The three figures the mass ceiling is measured over, and the three the
+# Atwater sum is made of: the same three, read off the shared vocabulary.
+_MACROS = tuple(energy.KCAL_PER_GRAM)
 
 # The sodium row, and only the sodium row: the word opens the line and its
 # figure follows immediately, with nothing between but the "less than" a trace
@@ -50,23 +55,17 @@ _SODIUM_ROW = re.compile(
     r"^\s*sodium\b:?\s*(?:less\s+than\s+)?[<\d]", re.IGNORECASE
 )
 
-# The same row, named rather than hunted for. A structured source states its
-# nutrient names, so the figure it must be followed by in pasted text -- the
-# thing that keeps "Sodium Bicarbonate (500)" out of a record -- is not needed
-# and would not be there to match.
-_SODIUM_NAME = re.compile(r"^\s*sodium\b[\s(]*(?:mg|g)?\)?\s*$", re.IGNORECASE)
-
-# A structured source often puts the unit in the row name -- "Sodium (mg)"
-# against a bare 400 -- which is the same figure stated a different way, not a
-# missing unit.
-_NAME_UNIT = re.compile(r"\(?\b(mg|g)\b\)?\s*$", re.IGNORECASE)
-
 # The rows this parser recognizes, in the order it tries them. First match
 # wins, so sodium leads: any other line naming it is skipped on the next rule,
-# which is what keeps "Sodium Bicarbonate (500)" out of the *carbs* row it
-# would otherwise match on "bicarbonate". Skipped rows come next: "-
+# which is what keeps "Sodium Bicarbonate (500)" out of the *carbohydrates* row
+# it would otherwise match on "bicarbonate". Skipped rows come next: "-
 # Saturated" would otherwise match the fat row, and "Sugars" and "Dietary
 # Fibre" both sit under carbohydrate on a label.
+#
+# Only a pasted label needs this. A structured source states its own row names
+# and `figures.read_rows` resolves them whole, which is why the two paths do
+# not share a pattern: hunting a name out of a line is the ambiguity, not the
+# vocabulary.
 _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # Read, unlike the salt row below it: salt is 2.5 times its sodium, so
     # taking one for the other would overstate the figure by 150 percent.
@@ -80,14 +79,16 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     ("sugar", re.compile(r"sugar", re.IGNORECASE)),
-    ("fiber", re.compile(r"fib(?:re|er)", re.IGNORECASE)),
+    ("dietary_fiber", re.compile(r"fib(?:re|er)", re.IGNORECASE)),
     ("protein", re.compile(r"protein", re.IGNORECASE)),
-    ("carbs", re.compile(r"carb", re.IGNORECASE)),
+    ("carbohydrates", re.compile(r"carb", re.IGNORECASE)),
     ("fat", re.compile(r"fat", re.IGNORECASE)),
     ("kcal", re.compile(r"energy|kilojoule|calorie", re.IGNORECASE)),
 )
 
 # The units a pack or serving size is written in, at the end of the figure.
+# Not a nutrient unit: a pack is millilitres as often as grams, and neither is
+# a share of the 100 g a panel describes.
 _UNIT = re.compile(r"(kg|ml|l|g)\s*$", re.IGNORECASE)
 
 _PER_HUNDRED = re.compile(r"per\s*100\s*(?:g|ml)", re.IGNORECASE)
@@ -96,31 +97,6 @@ _PER_SERVING = re.compile(r"per\s*serv", re.IGNORECASE)
 
 class NutritionError(ValueError):
     """A panel that is not worth storing, or a declaration that conflicts."""
-
-
-def _quantities(text: str) -> list[tuple[float, str]]:
-    """Every number on a line, with whatever unit was written beside it."""
-    found = []
-    for match in _QUANTITY.finditer(text):
-        try:
-            value = float(match.group(1).replace(",", ""))
-        except ValueError:
-            continue
-        found.append((value, (match.group(2) or "").lower()))
-    return found
-
-
-def parse_quantity(text: str | None) -> float | None:
-    """Read a single figure off a label.
-
-    A trace amount is written as a bound (`< 1.0g`, `LESS THAN 1.0 g`) and
-    the bound is the only figure the label carries, so it is what is stored.
-    """
-    if not text:
-        return None
-
-    found = _quantities(text)
-    return found[0][0] if found else None
 
 
 def parse_amount(text: str | None) -> tuple[float | None, str | None]:
@@ -135,12 +111,8 @@ def parse_amount(text: str | None) -> tuple[float | None, str | None]:
     if match is None:
         return (None, None)
 
-    return (parse_quantity(text), match.group(1).lower())
-
-
-def energy_to_kcal(value: float, unit: str) -> float:
-    """Normalize an energy figure to calories, whichever unit was used."""
-    return value * _KJ_PER_KCAL if unit.lower() == "kj" else value
+    found = figures.figures(text)
+    return (found[0][0] if found else None, match.group(1).lower())
 
 
 def _row_key(label: str) -> str | None:
@@ -185,7 +157,7 @@ def parse_panel(text: str) -> dict[str, float]:
         if key is None or key == "skip":
             continue
 
-        found = [q for q in _quantities(line) if math.isfinite(q[0])]
+        found = figures.figures(line)
         if not found:
             continue
 
@@ -197,61 +169,7 @@ def parse_panel(text: str) -> dict[str, float]:
         if not chosen:
             continue
 
-        panel[key] = _in_grams(key, chosen)
-
-    return panel
-
-
-def _in_grams(key: str, chosen: tuple[float, str]) -> float:
-    """One row's figure as the grams a record stores.
-
-    A macro is only ever printed in grams, so a bare "Protein 8.5" is not
-    ambiguous. Every other nutrient is printed in whichever unit keeps it
-    legible -- sodium in milligrams, the same figure in grams a thousandth of
-    the size -- so a bare number there is a guess between two answers that
-    differ by 1000x, and refusing beats guessing. Rounded because dividing
-    leaves binary-float noise that would be written to the record verbatim.
-    """
-    value, unit = chosen
-
-    if key in NUTRIENTS and not unit:
-        raise NutritionError(
-            f"nutrition panel states {key} with no unit: write"
-            f" {value:g}g or {value:g}mg"
-        )
-
-    return round(value / _MG_PER_G, 6) if unit == "mg" else value
-
-
-def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
-    """Read a panel whose rows a source already separated for us.
-
-    An API's nutrition table gives a name and a figure per row, so rendering
-    those back into label text only to hunt the name out of it again invents
-    an ambiguity that was never in the data: it is what lets an ingredient
-    list reach these patterns at all. Names are matched whole here, and the
-    figures come straight across.
-    """
-    panel: dict[str, float] = {}
-
-    for name, value in rows:
-        key = "sodium" if _SODIUM_NAME.match(name) else _row_key(name)
-        if key is None or key == "skip":
-            continue
-
-        found = [q for q in _quantities(value) if math.isfinite(q[0])]
-        if not found:
-            continue
-
-        if key == "kcal":
-            _read_energy(panel, found, first=False)
-            continue
-
-        figure, unit = found[0]
-        named = _NAME_UNIT.search(name)
-        panel[key] = _in_grams(
-            key, (figure, unit or (named.group(1).lower() if named else ""))
-        )
+        panel[key] = figures.grams(key, chosen[0], chosen[1])
 
     return panel
 
@@ -266,14 +184,17 @@ def _read_energy(
     kept when kilojoules were printed: kcal because everything downstream
     reads it, kj because deriving it back would invent a figure nobody wrote.
     """
-    calories = [q for q in found if q[1] in ("kcal", "cal")]
+    calories = [q for q in found if q[1] in figures.KCAL_SPELLINGS]
     chosen = _column(calories or found, first)
     if not chosen:
         return
 
-    value, unit = chosen[0], chosen[1] or "kj"
-    panel["kcal"] = energy_to_kcal(value, unit)
-    if unit == "kj":
+    value, unit = chosen
+    panel["kcal"] = figures.energy_kcal(value, unit)
+
+    # Anything that is not a calorie spelling is kilojoules, a bare figure
+    # included: that is what an AU panel prints when it prints one unit.
+    if unit not in figures.KCAL_SPELLINGS:
         panel["kj"] = value
 
 
@@ -307,7 +228,7 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
             f"nutrition panel has more energy than pure fat: {kcal} kcal"
         )
 
-    for key in ("protein", "fat", "carbs"):
+    for key in _MACROS:
         _check_mass(panel, key)
 
     # Absent is fine (plenty of labels omit them) but present and wrong is
@@ -320,11 +241,23 @@ def assert_usable_nutrients(panel: dict[str, Any]) -> None:
     # Catches the two mistakes a per-100 g figure cannot survive: a
     # per-serving column read by mistake, and a milligram figure landing in a
     # gram field.
-    mass = panel["protein"] + panel["fat"] + panel["carbs"]
+    mass = sum(panel[key] for key in _MACROS)
     if mass > _MASS_TOLERANCE:
         raise NutritionError(
             f"nutrition panel holds {mass:.1f} g of macros per 100 g"
         )
+
+    # Whether the macros can account for the energy printed beside them. The
+    # mass ceiling catches a column read from the wrong place; this catches a
+    # panel whose columns were read from two different places, which is the
+    # same figure being plausible and wrong.
+    #
+    # Ingress only, and deliberately: 635 of the 11,885 frozen rows do not
+    # reconcile, so `assert_product_record` never asks. Raised as the
+    # library's own `EnergyError` rather than restated as a `NutritionError`,
+    # because the rule and the tolerance are the library's and a second
+    # message would drift from them.
+    energy.assert_energy_reconciles(float(kcal), panel)
 
 
 def nutrients_for_storage(
@@ -348,7 +281,8 @@ def nutrients_for_storage(
                 f"--zero-calorie conflicts with nutrition panel {key}: {value}"
             )
 
-    zeroed: dict[str, float] = {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0}
+    zeroed: dict[str, float] = {"kcal": 0}
+    zeroed.update({key: 0 for key in _MACROS})
     zeroed.update(
         {k: panel[k] for k in CALORIE_FREE if panel.get(k) is not None}
     )

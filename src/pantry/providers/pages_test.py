@@ -25,7 +25,7 @@ HELD = {
     "kcal": 234.2,
     "protein": 8.5,
     "fat": 3.6,
-    "carbs": 38.4,
+    "carbohydrates": 38.4,
 }
 
 
@@ -131,7 +131,11 @@ def test_a_good_page_is_stored_immediately(make_deps, run, store_path) -> None:
     assert '"kj":980' in stored and '"kcal":234.2' in stored
     # The panel's 400 mg sodium row survives the page as the grams a record
     # holds, sorted in beside the other vocabulary nutrients.
-    assert '"fiber":4.1,"sodium":0.4,"sugar":2.2' in stored
+    # Saturated fat comes across too, now that a structured row is resolved
+    # against the shared vocabulary instead of a local list of three names.
+    assert (
+        '"dietary_fiber":4.1,"saturated_fat":0.6,"sodium":0.4,"sugar":2.2'
+    ) in stored
 
 
 def test_a_refresh_reports_its_changes_and_needs_the_record_held(

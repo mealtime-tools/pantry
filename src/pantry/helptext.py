@@ -19,10 +19,13 @@ NUTRIENTS
   Scale by grams / 100 at the point of display. Never store a pre-scaled
   value. An absent nutrient is unknown, never zero.
 
-  Energy and the four macros are on every record. Every other nutrient comes
-  from a vocabulary of accepted names -- fiber, sodium, sugar -- and a name
-  outside it is refused rather than stored: a misspelling stores cleanly and
-  then nothing ever finds the nutrient again.
+  Energy and the three macros -- protein, fat, carbohydrates -- are on every
+  record. Every other nutrient comes from the vocabulary the mealtime tools
+  share, whose canonical names are the Google Health API's, lowercased:
+  dietary_fiber, sodium, sugar, saturated_fat and the rest. Any spelling a
+  label writes resolves -- carbs, fibre, Dietary Fibre -- but a name outside
+  the vocabulary is refused rather than stored, because a misspelling stores
+  cleanly and then nothing ever finds the nutrient again.
 
   Per 100 g as sold, unless the record carries `basis`: as_sold or
   as_prepared, absent meaning as_sold. An as_prepared panel was printed for
@@ -107,16 +110,16 @@ ADD ONE RECORD
   "Sodium 400mg" and "Sodium 0.4g" both store 0.4, and a trace bound such as
   "LESS THAN 5mg" stores the bound. Any nutrient beyond the four macros must
   state its unit: the macros are only ever printed in grams, but "Sodium 355"
-  is a guess between two answers 1000 times apart, so it is refused. A Salt row is not read at all: salt is 2.5
-  times its sodium, and reading one as the other would overstate it by 150
-  percent.
+  is a guess between two answers 1000 times apart, so it is refused. A Salt
+  row is not read at all, and neither is "Sodium (as salt)": salt is 2.5 times
+  its sodium, and reading one as the other would overstate it by 150 percent.
 
   To be read, a Sodium row must open its line and be followed by its figure.
   That rules out an additive -- "Sodium Bicarbonate (500)", which also matches
-  the carbs row on "bicarbonate" -- and with it "Sodium (as salt)", "Sodium
-  (g) 0.4" (only a unit on the figure is converted) and a row wrapped in
-  markup. A declined row is absent from the record rather than guessed at, and
-  nothing warns about it.
+  the carbohydrates row on "bicarbonate" -- and with it "Sodium (g) 0.4" (only
+  a unit on the figure is converted) and a row wrapped in markup. A declined
+  row is absent from the record rather than guessed at, and nothing warns
+  about it.
 
   --manual reads the panel from stdin and never touches the network; with a
   retailer url it keeps that identity, so a blocked page is a redirection and
@@ -154,6 +157,15 @@ NEVER INFER ZEROS
   calorie-free nutrient is exempt: sodium carries no energy, so table salt is
   a genuine 0 kcal record with 38.758 g of it. Sugar is not exempt, and the
   100 g per 100 g ceiling still applies to every nutrient alike.
+
+  A panel is also refused when its macros cannot account for the energy
+  printed beside it: protein x 4 + fat x 9 + carbohydrates x 4 has to come
+  within 15 percent under or 10 percent over the stated calories. That is the
+  mistake no ceiling can see -- two columns read from two different places,
+  every figure plausible on its own. It costs a genuine refusal on the foods
+  Atwater under-counts by design: dried legumes, whose fibre an AU label
+  excludes from carbohydrate, and anything alcoholic. Enter those with a
+  corrected energy figure or not at all.
 
 STORAGE
   Everything added writes immediately under $XDG_CONFIG_HOME/pantry, or

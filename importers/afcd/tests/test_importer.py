@@ -40,9 +40,9 @@ def workbook(
             FIELDS["kj"]: 5,
             FIELDS["protein"]: 8,
             FIELDS["fat"]: 10,
-            FIELDS["fiber"]: 12,
+            FIELDS["dietary_fiber"]: 12,
             FIELDS["sugar"]: 20,
-            FIELDS["carbs"]: 39,
+            FIELDS["carbohydrates"]: 39,
         }
         for header, column in columns.items():
             nutrients.cell(3, column, header.replace(" ", "\n", 1))
@@ -68,9 +68,9 @@ def workbook(
                     "kj",
                     "protein",
                     "fat",
-                    "fiber",
+                    "dietary_fiber",
                     "sugar",
-                    "carbs",
+                    "carbohydrates",
                 ],
             ):
                 nutrients.cell(row, columns[FIELDS[field]], value)
@@ -117,9 +117,9 @@ def test_imports_only_per_100g_sheet_and_maps_fields(tmp_path):
         "brand": "",
         "kj": 418.4,
         "fat": 2,
-        "carbs": 1,
+        "carbohydrates": 1,
         "protein": 20,
-        "fiber": 0,
+        "dietary_fiber": 0,
         "sugar": 0,
         "kcal": 100,
     }

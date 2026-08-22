@@ -21,8 +21,13 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
-dependencies = ["click-agentcli>=0.1.0",
+dependencies = ["click-agentcli>=0.1.0", "mealtime-nutrition>=0.1.0",
     "python-dotenv>=1.0", "click>=8.1", "rapidfuzz>=3.9"]
+
+# Not on PyPI yet, so the shared nutrition domain is resolved from the sibling
+# checkout. Editable because the two move together while the seam settles.
+[tool.uv.sources]
+mealtime-nutrition = { path = "../nutrition", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/mealtime-tools/pantry"

@@ -19,7 +19,7 @@ HELD = {
     "kcal": 234.2,
     "protein": 8.5,
     "fat": 3.6,
-    "carbs": 38.4,
+    "carbohydrates": 38.4,
 }
 
 # One Search-a-licious hit, in the shape the deployed index really returns.
