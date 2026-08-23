@@ -19,7 +19,7 @@ from typing import Any
 
 from agentcli import RemoteError
 
-from pantry.products import Product
+from pantry.products import BASIS_GRAMS, Product
 
 BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 
@@ -120,6 +120,8 @@ def to_product(food: dict[str, Any]) -> Product:
         "id": str(identifier),
         "name": description.strip(),
         "brand": _brand(food),
+        # Stated rather than left out, though this API publishes only 100 g.
+        "grams": BASIS_GRAMS,
         "kcal": _energy_kcal(amounts),
         "url": (
             "https://fdc.nal.usda.gov/fdc-app.html"

@@ -6,11 +6,11 @@ minute. Acquiring a barcode goes through that same cached query rather than a
 second endpoint, so the one rate limit stays in one place.
 """
 
-from pantry.nutrition import NUTRIENTS, nutrients_for_storage, parse_amount
+from pantry.nutrition import NUTRIENTS, nutrients_for_storage
 from pantry.open_food_facts import OpenFoodFacts, RemoteFailure
 from pantry.products import Product
 from pantry.providers import AcquireOptions, Provider, Reference
-from pantry.sites import build_record, grams_from_amount, scale_panel
+from pantry.sites import build_record
 
 NUTRIENT_KEYS = ("kcal", "kj", "protein", "fat", "carbs", *NUTRIENTS)
 
@@ -36,21 +36,20 @@ class OpenFoodFactsProvider(Provider):
     def acquire(self, ref: Reference, options: AcquireOptions) -> Product:
         """Turn one community row into a record, or refuse it.
 
-        The panel goes through the same validation as a pasted label.
+        The panel goes through the same validation as a pasted label, and
+        the row's pack size is not read.
         """
         hit = self._exact(ref.id)
         panel = nutrients_for_storage(
             {key: hit[key] for key in NUTRIENT_KEYS if key in hit}
         )
-        grams = grams_from_amount(parse_amount(hit.get("quantity")))
         return build_record(
             source=ref.source,
             product_id=ref.id,
             name=hit["name"],
             brand=hit.get("brand", ""),
-            panel=scale_panel(panel, grams),
+            panel=panel,
             url=hit.get("url"),
-            grams=grams,
         )
 
     def _exact(self, barcode: str) -> dict:

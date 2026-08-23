@@ -15,7 +15,7 @@ from collections import defaultdict
 from rapidfuzz import fuzz, process
 
 from pantry.ids import id_sort_key
-from pantry.products import PRODUCT_SOURCES, Product
+from pantry.products import BASIS_GRAMS, PRODUCT_SOURCES, Product
 
 NUTRIENT_KEYS = ("kcal", "protein", "fat", "carbs", "fiber", "sodium", "sugar")
 
@@ -73,8 +73,9 @@ def as_result(product: Product) -> dict:
 
     if product.get("url") is not None:
         result["url"] = product["url"]
-    if product.get("grams") is not None:
-        result["grams"] = product["grams"]
+
+    # Never absent, so a consumer never has to infer the basis.
+    result["grams"] = product.get("grams") or BASIS_GRAMS
     result["source"] = product.get("source")
 
     return result

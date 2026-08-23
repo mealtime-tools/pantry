@@ -22,6 +22,8 @@ from pantry.products import (
     PRODUCT_SOURCES,
     Product,
     record_keys,
+    rescale,
+    restate,
 )
 from pantry.providers import (
     REF_FORMS,
@@ -69,7 +71,7 @@ def _payload(
         "reason": reason,
         "source": product["source"],
         "id": product["id"],
-        "product": as_result(product),
+        "product": rescale(as_result(product)),
         "changes": changes or [],
         "notes": notes or [],
     }
@@ -79,20 +81,16 @@ def _preserved(held: Product | None, product: Product) -> Product:
     """Keep the fields a held record carries and a new reading does not state.
 
     `add` rebuilds a record from whatever it was given, which on its own drops
-    every field the new source is silent about — including the pack size a
-    `basis_note` conversion is written against, and the basis itself, which no
+    every field the new source is silent about — including the basis, which no
     provider can ever re-supply. There is deliberately no way to remove a
     field: correcting one means restating it.
+
+    Both readings are per 100 g, so an older sodium figure stands beside a
+    newer energy one and there is nothing left to invalidate.
     """
     if not held:
         return product
-    merged = {**held, **product}
-    if held.get("grams") != product.get("grams"):
-        for key in _PANEL_KEYS - product.keys():
-            merged.pop(key, None)
-    if "grams" not in product:
-        merged.pop("grams", None)
-    return merged
+    return {**held, **product}
 
 
 def _changed_fields(before: Product, after: Product) -> list[str]:
@@ -122,7 +120,7 @@ _PANEL_KEYS = frozenset(
 
 
 def _read_input(text: str) -> tuple[dict[str, float], float | None]:
-    """Read canonical whole-item nutrients and optional total weight."""
+    """Read a panel and the weight it describes, 100 g if it names none."""
     try:
         decoded = json.loads(text)
     except json.JSONDecodeError as error:
@@ -378,7 +376,9 @@ def _manual_record(
         raise UsageError("a manual entry needs --name")
 
     figures, grams = _read_input(text)
-    panel = figures if grams is not None else nutrients_for_storage(figures)
+
+    # Restated before validation: the ceilings it must clear are per 100 g.
+    panel = nutrients_for_storage(restate(figures, grams))
 
     return build_record(
         source=reference.source if reference else "manual",
@@ -387,7 +387,6 @@ def _manual_record(
         brand=brand,
         panel=panel,
         url=reference.url if reference else None,
-        grams=grams,
         basis=basis,
         basis_note=basis_note,
     )

@@ -3,8 +3,10 @@
 import click
 from agentcli import emit, json_option, limit_option
 
+from pantry.commands import grams_option
 from pantry.commands.describe import describe
 from pantry.local import result_with_nulls
+from pantry.products import rescale
 from pantry.providers import PROVIDER_NAMES
 from pantry.session import deps, guard, wants_json
 
@@ -29,6 +31,7 @@ def _human(payload: dict) -> list[str]:
     is_flag=True,
     help="Also ask the providers that cost a network request.",
 )
+@grams_option
 @json_option
 @limit_option()
 @click.pass_context
@@ -37,6 +40,7 @@ def search(
     query: tuple[str, ...],
     sources: tuple[str, ...],
     remote: bool,
+    grams: float | None,
     json_output: bool,
     limit: int,
 ) -> None:
@@ -49,6 +53,8 @@ def search(
     load. `--limit` applies per provider, every result carries the `source` it
     came from, and `sources` names the providers that answered — one with no
     credential is skipped without a message.
+
+    `--grams` applies to every result alike: one list must not mix bases.
     """
     json_output = wants_json(ctx, json_output)
 
@@ -61,7 +67,7 @@ def search(
         results: list[dict] = []
         for provider in providers:
             results.extend(
-                result_with_nulls(result)
+                rescale(result_with_nulls(result), grams)
                 for result in provider.search(text, limit)
             )
 

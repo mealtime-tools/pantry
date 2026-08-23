@@ -76,8 +76,9 @@ def _providers(store: Store) -> Providers:
 def main(ctx: click.Context, json_output: bool) -> None:
     """Food product records, their sources, and search over them.
 
-    Nutrients describe the whole item, or 100 g when grams is absent.
-    Identity is (source, id).
+    Every product states the weight its nutrients describe in `grams`: 100
+    unless `--grams` names another. No pack or serving size is held. Identity
+    is (source, id).
     """
     # Tests inject prepared dependencies; only build the real ones otherwise.
     # Replaced rather than mutated so one injected set can serve several runs.

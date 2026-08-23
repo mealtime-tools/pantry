@@ -18,12 +18,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from pantry.ids import normalize_id
-from pantry.nutrition import (
-    nutrients_for_storage,
-    panel_from_rows,
-    parse_amount,
+from pantry.nutrition import nutrients_for_storage, panel_from_rows
+from pantry.products import (
+    BASIS_GRAMS,
+    MILLILITRE_NOTE,
+    UNSTATED_UNIT_NOTE,
+    Product,
 )
-from pantry.products import Product
 
 _NEXT_DATA = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
@@ -32,6 +33,9 @@ _NEXT_DATA = re.compile(
 
 # The column heading Woolworths files its per-100 g figures under.
 _WOOLIES_PER_100 = "Quantity Per 100g / 100mL"
+
+# A Coles liquid's column, and nothing else: a qualifier means it is not one.
+_PER_100_ML = re.compile(r"^\s*(?:per\s*)?100\s*ml\s*$", re.IGNORECASE)
 
 
 class SiteError(ValueError):
@@ -65,6 +69,7 @@ def _read_coles(payload: Any) -> dict[str, Any]:
         (b for b in breakdowns if "100" in str((b or {}).get("title", ""))),
         None,
     )
+    title = str((chosen or {}).get("title", ""))
     rows = [
         (str(n.get("nutrient", "")), str(n.get("value", "")))
         for n in (chosen or {}).get("nutrients") or []
@@ -74,7 +79,7 @@ def _read_coles(payload: Any) -> dict[str, Any]:
         "name": str(product.get("name") or ""),
         "brand": str(product.get("brand") or ""),
         "panel": panel_from_rows(rows),
-        "total": product.get("size"),
+        "basis_note": MILLILITRE_NOTE if _PER_100_ML.match(title) else None,
     }
 
 
@@ -103,7 +108,8 @@ def _read_woolworths(payload: Any) -> dict[str, Any]:
         "name": str(product.get("Name") or ""),
         "brand": str(product.get("Brand") or ""),
         "panel": panel_from_rows(rows),
-        "total": product.get("PackageSize"),
+        # One column for both units, so the page states neither.
+        "basis_note": UNSTATED_UNIT_NOTE,
     }
 
 
@@ -172,18 +178,17 @@ def parse_product_page(ref: ProductRef, html: str) -> Product:
 
     # The panel is validated before anything is built from it, so a bad page
     # fails with the reason rather than producing a record nobody can trust.
+    # It is stored as the column states it; the pack size is not read.
     panel = nutrients_for_storage(page["panel"])
-
-    grams = grams_from_amount(parse_amount(page["total"]))
-
     return build_record(
         source=ref.source,
         product_id=ref.id,
         name=page["name"],
         brand=page["brand"],
-        panel=scale_panel(panel, grams),
+        panel=panel,
         url=ref.url,
-        grams=grams,
+        # No `basis`: no retailer page declares one, and absent means it.
+        basis_note=page["basis_note"],
     )
 
 
@@ -195,17 +200,15 @@ def build_record(
     brand: str,
     panel: dict[str, float],
     url: str | None = None,
-    grams: float | None = None,
     basis: str | None = None,
     basis_note: str | None = None,
 ) -> Product:
-    """Assemble a record, omitting every field the label did not supply."""
+    """Assemble a per-100 g record, omitting every field the label omits."""
     optional = {
         # Absent unless a caller declares one: an unmarked record is as-sold.
         "basis": basis,
         "basis_note": basis_note,
         "url": url,
-        "grams": grams,
     }
 
     record: Product = {
@@ -222,24 +225,6 @@ def build_record(
         nutrients["kcal"] = math.floor(panel["kcal"] * 10 + 0.5) / 10
     record.update(nutrients)
     record.update({k: v for k, v in optional.items() if v is not None})
+    record["grams"] = BASIS_GRAMS
 
     return record
-
-
-def grams_from_amount(total: tuple[float | None, str | None]) -> float | None:
-    amount, unit = total
-    if amount is None:
-        return None
-    if unit == "g":
-        return amount
-    if unit == "kg":
-        return amount * 1000
-    return None
-
-
-def scale_panel(
-    panel: dict[str, float], grams: float | None
-) -> dict[str, float]:
-    if grams is None:
-        return panel
-    return {key: value * grams / 100 for key, value in panel.items()}

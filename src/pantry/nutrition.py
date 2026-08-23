@@ -78,9 +78,6 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("kcal", re.compile(r"energy|kilojoule|calorie", re.IGNORECASE)),
 )
 
-# The units a pack or serving size is written in, at the end of the figure.
-_UNIT = re.compile(r"(kg|ml|l|g)\s*$", re.IGNORECASE)
-
 
 class NutritionError(ValueError):
     """A panel that is not worth storing, or a declaration that conflicts."""
@@ -96,34 +93,6 @@ def _quantities(text: str) -> list[tuple[float, str]]:
             continue
         found.append((value, (match.group(2) or "").lower()))
     return found
-
-
-def parse_quantity(text: str | None) -> float | None:
-    """Read a single figure off a label.
-
-    A trace amount is written as a bound (`< 1.0g`, `LESS THAN 1.0 g`) and
-    the bound is the only figure the label carries, so it is what is stored.
-    """
-    if not text:
-        return None
-
-    found = _quantities(text)
-    return found[0][0] if found else None
-
-
-def parse_amount(text: str | None) -> tuple[float | None, str | None]:
-    """Split "450g" or "650 ml" into the number and unit a record stores.
-
-    Both halves or neither. A community quantity such as "4 * 125 g (500 g)"
-    reads as the number 4, and storing that without a unit would claim a
-    450 g loaf and a 4-pack are the same size — a wrong value, not a missing
-    one.
-    """
-    match = _UNIT.search(text) if text else None
-    if match is None:
-        return (None, None)
-
-    return (parse_quantity(text), match.group(1).lower())
 
 
 def energy_to_kcal(value: float, unit: str) -> float:
