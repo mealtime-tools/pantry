@@ -70,8 +70,7 @@ def _nutrients(values: Any) -> dict[str, float]:
         "carbs": _number(source.get("carbohydrates_100g")),
         "fiber": _number(source.get("fiber_100g")),
         "sugar": _number(source.get("sugars_100g")),
-        # The index publishes grams per 100 g; acquisition scales when it also
-        # supplies a total product weight.
+        # The index publishes grams per 100 g, which is what a record holds.
         "sodium": _number(source.get("sodium_100g")),
     }
     return {k: v for k, v in mapped.items() if v is not None}
@@ -96,7 +95,6 @@ def _parse_hit(value: Any) -> dict | None:
         return None
 
     brand = _brand(value.get("brands"))
-    quantity = value.get("quantity")
     result: dict[str, Any] = {
         "source": "openfoodfacts",
         "id": product_id,
@@ -104,9 +102,6 @@ def _parse_hit(value: Any) -> dict | None:
         "brand": brand,
         "title": f"{label} ({brand})" if brand else label,
     }
-    if isinstance(quantity, str) and quantity.strip():
-        result["quantity"] = quantity.strip()
-
     result.update(_nutrients(value.get("nutriments")))
     result["url"] = (
         "https://world.openfoodfacts.org/product/"

@@ -1,8 +1,9 @@
 """The record format: what a product is, and how it is read and written.
 
-Nutrients describe the whole product when `grams` is present. Otherwise
-they describe 100 g. This keeps a bar directly loggable without inventing a
-serving model, while records whose source has no weight remain useful.
+`grams` is the weight a record's nutrients describe. Every stored record is per
+100 g and every one states it, so storage and the wire are one shape. There is
+no pack size or serving size. A per-100 mL panel is stored as per 100 g,
+unconverted, and says so in `basis_note`.
 
 Structural fields are enumerated because each is validated in its own way.
 Energy and the four macros are enumerated because they are cross-checked
@@ -58,11 +59,23 @@ NUTRIENT_KEYS = ("kcal", "kj", "protein", "fat", "carbs", *NUTRIENTS)
 # the caveat beside the numbers it applies to.
 BASIS_KEYS = ("basis", "basis_note")
 
+# What a record says when its panel was printed per 100 mL, exact for water.
+MILLILITRE_NOTE = "per 100 mL, read as 100 g"
+
+# The same, where one column is headed for both units and so states neither.
+UNSTATED_UNIT_NOTE = "per 100 g or 100 mL; the page does not say which"
+
 Product = dict[str, Any]
+
+# The basis every stored record holds, and what absence means on a frozen row.
+BASIS_GRAMS = 100
 
 # Grams per 100 g, so 100 is the ceiling for every nutrient alike. Pure table
 # salt is only 38.758 g of sodium, so nothing edible comes near it.
 _MAX_PER_100G = 100
+
+# Where a restated figure is rounded, the precision every source is read to.
+_PLACES = 6
 
 # Every key a record may hold. Closed rather than open: an unrecognised key is
 # a misspelling far more often than it is a new field, and `sodum` would store
@@ -72,6 +85,43 @@ _ALLOWED_KEYS = frozenset((*PRODUCT_KEYS, *NUTRIENT_KEYS, *BASIS_KEYS))
 
 class ProductError(ValueError):
     """A record that would need a compatibility guess to accept."""
+
+
+def _restated(key: str, value: Any, factor: float) -> Any:
+    """One figure against a new basis, unchanged when unknown or not moving."""
+    if value is None or factor == 1:
+        return value
+
+    moved = value * factor
+    # Neither JSON nor this package's own serializer can express one of these.
+    if not math.isfinite(moved):
+        raise ProductError(f"{key} does not survive that weight: {moved}")
+
+    restated = round(moved, _PLACES)
+    # Zero is reserved for a figure the source itself reported as zero.
+    if restated == 0 and value != 0:
+        raise ProductError(f"that weight rounds {key} away to zero")
+    return restated
+
+
+def restate(
+    nutrients: dict[str, Any], frm: float | None, to: float | None = None
+) -> dict[str, Any]:
+    """Every nutrient moved from one weight to another, `kj` included."""
+    # Zero or absent reads as 100 rather than being divided by.
+    factor = (to or BASIS_GRAMS) / (frm or BASIS_GRAMS)
+    return {
+        key: _restated(key, value, factor) if key in NUTRIENT_KEYS else value
+        for key, value in nutrients.items()
+    }
+
+
+def rescale(product: Product, grams: float | None = None) -> Product:
+    """A record stated against `grams`, or per 100 g, always saying which."""
+    return {
+        **restate(product, product.get("grams"), grams),
+        "grams": grams or BASIS_GRAMS,
+    }
 
 
 def identity(product: Product) -> tuple[str, str]:
@@ -153,25 +203,33 @@ def record_keys(product: Product) -> tuple[str, ...]:
 
 
 def assert_product_record(product: Product) -> None:
-    """Structural checks only, safe for the frozen historical Coles rows.
+    """What a record must satisfy to be written.
 
-    141 of those rows fail today's stricter nutrition rules and none of them
-    can be re-scraped, so the shard is validated for shape and not for
-    plausibility.
+    The read path is looser: 141 rows of the historical Coles scrape fail
+    today's nutrition rules and none of them can be re-scraped, but nothing
+    writes those rows, so nothing has to accept them here.
     """
     assert_identity(product)
     _check_keys(product)
-    fallback = product.get("grams") is None
+
+    # Unconditional: every record is per 100 g, so every ceiling applies.
     for key in NUTRIENT_KEYS:
-        maximum = (
-            _MAX_PER_100G if fallback and key not in ("kcal", "kj") else None
-        )
+        maximum = None if key in ("kcal", "kj") else _MAX_PER_100G
         _check_number(
             product, _label(product), key, optional=True, maximum=maximum
         )
-    _check_number(product, _label(product), "grams", optional=True)
 
+    _check_grams(product)
     _check_basis(product)
+
+
+def _check_grams(product: Product) -> None:
+    """Refuse a basis nothing can be divided by. Optional: absent means 100."""
+    _check_number(product, _label(product), "grams", optional=True)
+    if product.get("grams") is not None and product["grams"] <= 0:
+        raise ProductError(
+            f"{_label(product)} has implausible grams: {product['grams']}"
+        )
 
 
 def assert_exportable_product(product: Product) -> None:
