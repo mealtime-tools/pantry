@@ -2,7 +2,7 @@
 # The distribution name is prefixed because `pantry` is taken on PyPI. The
 # import stays `pantry`.
 name = "mealtime-pantry"
-version = "0.2.1"
+version = "0.2.2"
 description = "Food product records with local fuzzy search, Open Food Facts discovery, and a CLI to add products."
 readme = "README.md"
 license = "MIT"
