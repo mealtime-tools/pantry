@@ -1,11 +1,9 @@
 """Open Food Facts discovery, and the disposable cache in front of it.
 
-Results are candidates, not records: they are community-maintained, they are
-not proof of current retailer availability, and nothing here writes to the
-durable localstore. The cache is therefore under `XDG_CACHE_HOME`,
-where losing
-it costs one request, and it exists because the public index asks callers to
-stay under ten searches a minute.
+Results are candidates, not records: community-maintained, no proof of current
+retailer availability, and nothing here writes to the durable localstore. The
+cache sits under `XDG_CACHE_HOME`, where losing it costs one request, and
+exists because the public index asks for under ten searches a minute.
 """
 
 import hashlib
@@ -181,9 +179,7 @@ class OpenFoodFacts:
         return results
 
     def _request(self, query: str, page_size: int) -> list[dict]:
-        # `boost_phrase` is what makes a multi-word product name rank above the
-        # individual words appearing anywhere; `langs=en` narrows the index
-        # without constraining geography, which is never identity evidence.
+        # `boost_phrase` ranks a whole name first; `langs` is not geography.
         params = urllib.parse.urlencode(
             {
                 "q": query,

@@ -1,11 +1,10 @@
 """Local fuzzy search over product records. No network, ever.
 
-This is the check that stands between a user and a wasted page load, so it is
-deliberately generous about spelling and deliberately strict about relevance:
-a query's score is the sum of the best match found for each of its words, so a
-product matching every word outranks one matching a single word well. The
-reference implementation fuzzy-matched each word against the whole "name brand"
-string, which let one strong accidental match beat a complete one.
+This stands between a user and a wasted page load, so it is generous about
+spelling and strict about relevance: a query scores the sum of the best match
+for each word, so a product matching every word outranks one matching a single
+word well. Matching against the whole "name brand" string, as the reference
+implementation did, let one accident beat a complete match.
 """
 
 import re
@@ -14,27 +13,34 @@ from collections import defaultdict
 
 from rapidfuzz import fuzz, process
 
-from pantry.ids import id_sort_key
-from pantry.products import BASIS_GRAMS, PRODUCT_SOURCES, Product
+from mealtime_nutrients import CORE_NUTRIENTS
 
-NUTRIENT_KEYS = ("kcal", "protein", "fat", "carbs", "fiber", "sodium", "sugar")
+from pantry.ids import id_sort_key
+from pantry.products import (
+    BASIS_GRAMS,
+    NUTRIENT_KEYS,
+    PRODUCT_SOURCES,
+    Product,
+)
 
 
 def result_with_nulls(result: dict) -> dict:
-    """Complete a provider search result without inventing measurements."""
+    """Complete a provider search result without inventing measurements.
+
+    Only the four that are always present: an absent nutrient and a null one
+    say the same thing, so spelling out the rest of the vocabulary would be
+    tens of keys per row carrying no answer.
+    """
     shown = dict(result)
-    for key in NUTRIENT_KEYS:
+    for key in CORE_NUTRIENTS:
         shown[key] = shown.get(key)
     return shown
 
 
-# Below this, a word pair is a coincidence rather than a spelling variant.
-# "yogurt" against "yoghurt" scores 92, which is the case that sets the floor.
+# Below this a word pair is coincidence; "yoghurt" scores 92 on "yogurt".
 _WORD_CUTOFF = 80
 
-# What a prefix is worth. Typing "choc" to find "chocolate" is a search
-# affordance a symmetric ratio cannot express, but it must not outrank an
-# exact word match.
+# What a prefix is worth: "choc" finds "chocolate", never beating an exact.
 _PREFIX_SCORE = 90
 _MIN_PREFIX = 3
 
@@ -60,13 +66,13 @@ def as_result(product: Product) -> dict:
         "id": product.get("id"),
         "name": name,
         "title": f"{name} ({brand})" if brand else name,
-        **{key: product.get(key) for key in NUTRIENT_KEYS},
+        **{
+            key: product.get(key)
+            for key in NUTRIENT_KEYS
+            if key in CORE_NUTRIENTS or product.get(key) is not None
+        },
     }
-    # Beside the nutrients, for the same reason they are stored together: a
-    # prepared-basis result that looks identical to an as-sold one is the bug.
-    # Empty rather than absent, because a record read off a hand-edited shard
-    # may carry a note that says nothing, and this shape is documented as
-    # carrying these keys only when the record really does.
+    # Carried when stated: a prepared result reading as as-sold is the bug.
     for key in ("basis", "basis_note"):
         if product.get(key):
             result[key] = product[key]
@@ -135,8 +141,7 @@ class Local:
 
         totals: dict[int, float] = defaultdict(float)
         for token in tokens:
-            # One product may hold several words matching the same query word;
-            # only its best counts, so repetition cannot inflate a score.
+            # Only a product's best word counts; repetition must not inflate.
             best: dict[int, int] = {}
             best_words: dict[int, str] = {}
             for word, score in self._word_scores(token).items():
@@ -152,8 +157,7 @@ class Local:
                 head_words = _words(head_segment)
                 matched_word = best_words[position]
 
-                # A query term matching the head of a product name scores
-                # higher than one matching a modifier.
+                # A head-of-name match outscores one against a modifier.
                 word_score = score
                 if head_words:
                     if fuzz.ratio(head_words[0], matched_word) >= _WORD_CUTOFF:

@@ -1,19 +1,10 @@
 """Spending page loads on a supermarket, carefully.
 
-The rules this file exists to enforce, in the order they matter:
-
-  1. **A block ends the session.** No retry, no second user agent, no proxy,
-     nothing that makes the client look less like what it is. The user gets
-     four or five page loads before a captcha; an escalation would cost them
-     that. When a site says no, this stops and the answer is manual entry.
-  2. **A hard budget**, counted whether or not the request succeeded, because
-     the site served it either way.
-  3. **Polite pacing** between requests.
-
-The transport is injected, so every test here runs offline, and so the browser
-driver never reaches a caller that only wants a plain request. Only the
-retailer provider uses any of this; the numbers those rules are tuned to live
-there with it.
+Three rules: a block ends the session, with no retry and nothing that makes the
+client look less like what it is; the budget is hard, and counted even for a
+refused request, because the site served it either way; requests are paced. The
+transport is injected, so every test here runs offline, and only the retailer
+provider uses any of this.
 """
 
 import re
@@ -30,10 +21,7 @@ _USER_AGENT = (
     "(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
 )
 
-# Phrases that only appear on a refusal. Deliberately narrow: a working Coles
-# page carries an Incapsula script tag and a reCAPTCHA site key in its
-# ordinary payload, so matching "incapsula" or "captcha" alone would read
-# every successful load as a block.
+# Narrow on purpose: a working Coles page carries Incapsula and reCAPTCHA.
 _BLOCK_MARKERS = (
     r"incapsula incident id",
     r"request unsuccessful",
@@ -158,8 +146,7 @@ class PlainTransport:
             },
         )
 
-        # An error status is still a served page, and its body is what says
-        # whether this was a block or an ordinary 404.
+        # An error status is still a served page; its body says which it is.
         try:
             with self._opener(request, timeout=30) as response:
                 body = response.read().decode("utf-8", "replace")
@@ -227,8 +214,7 @@ class PageLoader:
         for transport in self._transports:
             self.budget.claim()
 
-            # No wait before the first request of the run; a real one before
-            # every request after it, whichever transport is making it.
+            # No wait before the run's first request, one before every other.
             if self._requested and self._pace_ms:
                 self._sleep(self._pace_ms / 1000)
             self._requested = True

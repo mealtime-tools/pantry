@@ -2,8 +2,15 @@ import hashlib
 import json
 from pathlib import Path
 
-from afcd_import.cli import DETAILS_SHEET, FIELDS, NUTRIENTS_SHEET, main
+from afcd_import.cli import (
+    DETAILS_SHEET,
+    FIELDS,
+    NUTRIENTS_SHEET,
+    main,
+    shard_kcal,
+)
 from click.testing import CliRunner
+from mealtime_nutrients import kcal_from_kj
 from openpyxl import Workbook
 
 
@@ -102,6 +109,22 @@ def run_import(tmp_path: Path, **kwargs):
     return result, details, profiles, out
 
 
+def published_kcal(kilojoules: float) -> float | int:
+    """The arithmetic the shipped shard was built with, written plainly."""
+    kcal = round(kilojoules / 4.184, 1)
+    return int(kcal) if kcal == int(kcal) else kcal
+
+
+def test_the_shipped_energy_figures_do_not_move():
+    """data/afcd.jsonl holds these, and nothing can regenerate them."""
+    for tenths in range(1, 200_001):
+        kilojoules = round(tenths * 0.1, 1)
+        published = published_kcal(kilojoules)
+        converted = shard_kcal(kcal_from_kj(kilojoules))
+        assert converted == published, kilojoules
+        assert type(converted) is type(published), kilojoules
+
+
 def test_imports_only_per_100g_sheet_and_maps_fields(tmp_path):
     result, _, _, out = run_import(tmp_path)
     assert result.exit_code == 0, result.output
@@ -116,7 +139,6 @@ def test_imports_only_per_100g_sheet_and_maps_fields(tmp_path):
         "name": "Abalone",
         "brand": "",
         "kcal": 100,
-        "kj": 418.4,
         "protein": 20,
         "fat": 2,
         "carbs": 1,

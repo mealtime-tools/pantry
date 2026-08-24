@@ -19,6 +19,9 @@ and which is 100 unless `--grams N` asks for another weight. There is no pack
 size or serving size. A per-100 mL panel is read as per 100 g and says so in
 `basis_note`. Items pipe to Recipes or Nutrilog unchanged.
 
+Energy is `kcal` and every other nutrient is grams. A panel printing
+kilojoules is converted where it is read, so no record holds a `kj`.
+
 Manual input is flat JSON, restated to 100 g before it is stored:
 
 ```sh

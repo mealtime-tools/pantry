@@ -1,13 +1,10 @@
 """Reading a product off a supermarket page.
 
-Both sites are Next.js applications that server-render their whole product
-payload into a `__NEXT_DATA__` script tag, nutrition panel included. That is
-the entire reason this fetcher needs no browser: a plain GET with an ordinary
-user agent returns the panel, so `browser.py` is a fallback for the day one of
-them stops doing that, not the normal path.
-
-Nothing here performs I/O. A page arrives as a string and leaves as a record,
-which is what lets every test run offline.
+Both sites server-render their whole product payload, nutrition panel included,
+into a `__NEXT_DATA__` script tag, so a plain GET with an ordinary user agent
+returns the panel and `browser.py` is only a fallback. Nothing here performs
+I/O: a page arrives as a string and leaves as a record, so every test runs
+offline.
 """
 
 import json
@@ -176,9 +173,7 @@ def parse_product_page(ref: ProductRef, html: str) -> Product:
     if not page["name"]:
         raise SiteError(f"{ref.url}: page carries no product name")
 
-    # The panel is validated before anything is built from it, so a bad page
-    # fails with the reason rather than producing a record nobody can trust.
-    # It is stored as the column states it; the pack size is not read.
+    # Validated first, so a bad page fails with a reason, not a bad record.
     panel = nutrients_for_storage(page["panel"])
     return build_record(
         source=ref.source,

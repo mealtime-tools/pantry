@@ -102,12 +102,22 @@ wheels = [
 ]
 
 [[package]]
+name = "mealtime-nutrients"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/e0/a1559cd29f532700f377157d415ad3366af5de55b6e1661a0e54e0485406/mealtime_nutrients-0.3.0.tar.gz", hash = "sha256:7c9cc510c26c18f6a89d02e7b20929c8e58fc600ace1c7f8b73630f874922a36", size = 15187, upload-time = "2026-08-24T22:50:46.502Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/21/4d/cc0fbd501390c98bebf584b3d7babf3b9c860a93f19feaebf1bbad3dcea3/mealtime_nutrients-0.3.0-py3-none-any.whl", hash = "sha256:65984dcc080a443ebb4513e62ed4b328b265684c1eeb036b6f502bfb2821e634", size = 13203, upload-time = "2026-08-24T22:50:45.412Z" },
+]
+
+[[package]]
 name = "mealtime-pantry"
 version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "click-agentcli" },
+    { name = "mealtime-nutrients" },
     { name = "python-dotenv" },
     { name = "rapidfuzz" },
 ]
@@ -127,6 +137,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "click-agentcli", specifier = ">=0.1.0" },
+    { name = "mealtime-nutrients", specifier = ">=0.3.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "rapidfuzz", specifier = ">=3.9" },

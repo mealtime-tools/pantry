@@ -1,11 +1,9 @@
 """The browser fallback, for the day a site stops server-rendering its panel.
 
-It is not the normal path. Both supermarkets currently return the whole
-nutrition payload to a plain request, which is lighter and leaves more of the
-page budget for actual products. This exists so the tool has somewhere to go
-if that changes, and the user has to ask for it explicitly with `--browser`.
-
-Playwright is imported lazily so a clone without it still fetches.
+Not the normal path: both supermarkets return the whole nutrition payload to a
+plain request, which leaves more of the page budget for actual products. The
+user asks for this explicitly with `--browser`, and Playwright is imported
+lazily so a clone without it still fetches.
 """
 
 from typing import Any
@@ -48,8 +46,7 @@ def launch_chrome() -> tuple[Any, Any]:
     try:
         browser = driver.chromium.launch(channel="chrome")
     except Exception:  # noqa: BLE001 - playwright raises its own error type
-        # Only the second failure is worth reporting: the first is expected on
-        # a machine that simply has no Chrome installed.
+        # Expected where no Chrome is installed; only a second failure counts.
         browser = driver.chromium.launch()
 
     return (driver, browser)

@@ -1,27 +1,22 @@
 """The record format: what a product is, and how it is read and written.
 
-`grams` is the weight a record's nutrients describe. Every stored record is per
-100 g and every one states it, so storage and the wire are one shape. There is
-no pack size or serving size. A per-100 mL panel is stored as per 100 g,
-unconverted, and says so in `basis_note`.
-
-Structural fields are enumerated because each is validated in its own way.
-Energy and the four macros are enumerated because they are cross-checked
-against each other. Every other nutrient is open, governed by the vocabulary
-in `pantry.nutrition`.
+`grams` is the weight the nutrients describe: every record is per 100 g and
+states it, so storage and the wire are one shape. There is no pack or serving
+size; a per-100 mL panel is stored unconverted, with a `basis_note`. Structural
+fields and the cross-checked macros are enumerated because each is validated
+its own way; every other nutrient is open, governed by the vocabulary.
 """
 
 import json
 import math
 from typing import Any
 
+from mealtime_nutrients import NUTRIENTS, kcal_from_kj
+
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
-from pantry.nutrition import NUTRIENTS
 
-# The data owners. `localstore` is deliberately absent: it is a storage
-# layer, and
-# this tuple's order is also the order shards are written in.
+# The data owners, in the order shards are written. `localstore` is not one.
 PRODUCT_SOURCES = (
     "coles",
     "woolworths",
@@ -31,18 +26,13 @@ PRODUCT_SOURCES = (
     "manual",
 )
 
-# What a record's nutrients are measured against. Absent is the default and
-# means as-sold: the frozen shards predate the key, and writing a default into
-# them would rewrite a file nothing can regenerate.
+# What the nutrients are measured against. Absent means as-sold.
 PRODUCT_BASES = (
     "as_sold",
     "as_prepared",
 )
 
-# What identifies and packages a product, in the order these are written. The
-# scrape emitted several key orders and no particular record order, which
-# turned an edit to one product into a diff across the whole file. Pinning
-# both is the entire point of storing JSONL.
+# What identifies a product, in the order written. Pinning that is why JSONL.
 PRODUCT_KEYS = (
     "source",
     "id",
@@ -52,11 +42,10 @@ PRODUCT_KEYS = (
     "grams",
 )
 
-# Every stored nutrient is a top-level key, in this order.
-NUTRIENT_KEYS = ("kcal", "kj", "protein", "fat", "carbs", *NUTRIENTS)
+# The vocabulary's own order, which already leads with the cross-checked four.
+NUTRIENT_KEYS = NUTRIENTS
 
-# Written last, after the figures they qualify, so a line read by eye carries
-# the caveat beside the numbers it applies to.
+# Written last, so a line read by eye carries the caveat beside its figures.
 BASIS_KEYS = ("basis", "basis_note")
 
 # What a record says when its panel was printed per 100 mL, exact for water.
@@ -70,16 +59,13 @@ Product = dict[str, Any]
 # The basis every stored record holds, and what absence means on a frozen row.
 BASIS_GRAMS = 100
 
-# Grams per 100 g, so 100 is the ceiling for every nutrient alike. Pure table
-# salt is only 38.758 g of sodium, so nothing edible comes near it.
+# Grams per 100 g: pure salt is 38.758 g of sodium, so nothing comes near.
 _MAX_PER_100G = 100
 
 # Where a restated figure is rounded, the precision every source is read to.
 _PLACES = 6
 
-# Every key a record may hold. Closed rather than open: an unrecognised key is
-# a misspelling far more often than it is a new field, and `sodum` would store
-# cleanly and then no consumer would ever find the sodium again.
+# Closed, not open: `sodum` would store cleanly and hide the sodium forever.
 _ALLOWED_KEYS = frozenset((*PRODUCT_KEYS, *NUTRIENT_KEYS, *BASIS_KEYS))
 
 
@@ -107,7 +93,7 @@ def _restated(key: str, value: Any, factor: float) -> Any:
 def restate(
     nutrients: dict[str, Any], frm: float | None, to: float | None = None
 ) -> dict[str, Any]:
-    """Every nutrient moved from one weight to another, `kj` included."""
+    """Every nutrient moved from one weight to another, energy included."""
     # Zero or absent reads as 100 rather than being divided by.
     factor = (to or BASIS_GRAMS) / (frm or BASIS_GRAMS)
     return {
@@ -135,8 +121,7 @@ def assert_identity(product: Product) -> None:
     if source not in PRODUCT_SOURCES:
         raise ProductError(f"product has unsupported source: {source}")
 
-    # Numeric ids are refused rather than coerced: accepting one would let a
-    # barcode lose its leading zeros somewhere upstream and go unnoticed.
+    # Refused, not coerced: a coerced barcode has already lost its zeros.
     if not isinstance(product.get("id"), str):
         raise ProductError("product id must be a string")
     if not product["id"]:
@@ -171,11 +156,10 @@ def _check_number(
 def _check_basis(product: Product) -> None:
     """Refuse a basis this format does not define.
 
-    Coerced or ignored, an unknown value reads as "no caveat" — which is
-    exactly the silent scaling error the key exists to make visible. The one
-    rule strict enough to run when a record is merely read, and the only thing
-    checked about the pair: `basis_note` is free text, and a note a reader can
-    see is not worth failing the shard it sits in.
+    Coerced or ignored, an unknown value reads as "no caveat" — the silent
+    scaling error the key exists to make visible. The one rule strict enough
+    to run when a record is merely read, and the only thing checked about the
+    pair: `basis_note` is free text.
     """
     basis = product.get("basis")
     if basis is not None and basis not in PRODUCT_BASES:
@@ -186,6 +170,23 @@ def _check_basis(product: Product) -> None:
 
 def _label(product: Product) -> str:
     return f"{product.get('source')}:{product.get('id')}"
+
+
+def without_kilojoules(product: Product) -> Product:
+    """A record stored before energy was kcal alone, read as kcal alone.
+
+    Records written by an earlier version hold `kj`, which is no longer a key
+    this format defines. Converting on the way in rather than refusing keeps
+    a localstore readable, and the label's own kcal wins where it stated one.
+    """
+    if "kj" not in product:
+        return product
+
+    converted = dict(product)
+    kilojoules = converted.pop("kj")
+    if converted.get("kcal") is None and kilojoules is not None:
+        converted["kcal"] = float(round(kcal_from_kj(kilojoules), 1))
+    return converted
 
 
 def _check_keys(product: Product) -> None:
@@ -214,7 +215,7 @@ def assert_product_record(product: Product) -> None:
 
     # Unconditional: every record is per 100 g, so every ceiling applies.
     for key in NUTRIENT_KEYS:
-        maximum = None if key in ("kcal", "kj") else _MAX_PER_100G
+        maximum = None if key == "kcal" else _MAX_PER_100G
         _check_number(
             product, _label(product), key, optional=True, maximum=maximum
         )
@@ -292,16 +293,12 @@ def parse_jsonl(
                     raise ProductError(
                         f"record source {held} does not match {source} shard"
                     )
-                # Placed first so a parsed row already reads in canonical key
-                # order, which is what the shard on disk is written in.
+                # First, so a parsed row reads in the shard's own key order.
                 parsed = {"source": source, **parsed}
+            parsed = without_kilojoules(parsed)
             assert_identity(parsed)
             _check_keys(parsed)
-            # The one key checked on the way in: an unrecognised basis reads
-            # as "absent", and absent means as-sold, so the record would
-            # silently lose the warning it was written to carry. Nothing else
-            # is, because a whole shard failing over one row would take every
-            # other record down with it.
+            # Checked on read: an unrecognised basis silently becomes as-sold.
             _check_basis(parsed)
         except (ValueError, AttributeError) as cause:
             raise ProductError(

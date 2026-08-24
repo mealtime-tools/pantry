@@ -1,14 +1,10 @@
 """Reading one food out of FoodData Central.
 
-Unlike a retailer page this is a documented API with a key and a published
-rate limit, so none of the fetcher's block rules or page budget apply: there is
-nothing here to be refused by and nothing to pace around. It is a plain
-request.
-
-`foodNutrients[].amount` is per 100 g for every data type, which is already
-Pantry's basis, so only the unit is converted on the way in. `labelNutrients`
-is per serving and is deliberately ignored — reading it would silently make
-every recipe wrong by the ratio of serving size to 100 g.
+A documented API with a key and a rate limit, so none of the fetcher's block
+rules or page budget apply. `foodNutrients[].amount` is per 100 g for every
+data type, which is already Pantry's basis, so only the unit is converted on
+the way in; `labelNutrients` is per serving and deliberately ignored, since
+reading it would make every recipe wrong by serving size over 100 g.
 """
 
 import json
@@ -18,6 +14,7 @@ import urllib.request
 from typing import Any
 
 from agentcli import RemoteError
+from mealtime_nutrients import kcal_from_kj
 
 from pantry.products import BASIS_GRAMS, Product
 
@@ -25,8 +22,7 @@ BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 
 TIMEOUT_S = 30
 
-# FoodData Central nutrient ids. Energy in kJ is the fallback for the handful
-# of records that carry only the SI figure.
+# FoodData Central nutrient ids; kJ is the fallback for SI-only records.
 KCAL_ID = 1008
 KJ_ID = 1062
 NUTRIENT_IDS = {
@@ -38,14 +34,10 @@ NUTRIENT_IDS = {
     1093: "sodium",
 }
 
-# The ids this API publishes in milligrams; a record holds grams. Stated here
-# rather than read from the response's `unitName`, because a response that
-# omitted that field would silently store a figure a thousand times too large.
+# The ids published in milligrams, stated because `unitName` may be absent.
 MILLIGRAM_IDS = frozenset({1093})
 
 MG_PER_G = 1000
-
-KCAL_PER_KJ = 1 / 4.184
 
 
 def _grams(nutrient_id: int, amount: float) -> float:
@@ -81,7 +73,7 @@ def _energy_kcal(amounts: dict[int, float]) -> float:
     if KCAL_ID in amounts:
         return amounts[KCAL_ID]
     if KJ_ID in amounts:
-        return round(amounts[KJ_ID] * KCAL_PER_KJ, 1)
+        return float(round(kcal_from_kj(amounts[KJ_ID]), 1))
 
     raise RemoteError("the USDA record carries no energy figure")
 

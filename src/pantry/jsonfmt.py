@@ -23,13 +23,11 @@ def _digits(value: float) -> tuple[str, int]:
     mantissa, _, exponent = text.partition("e")
     integral, _, fractional = mantissa.partition(".")
 
-    # `point` counts digits to the left of the decimal separator, which is what
-    # the ECMAScript algorithm calls `n`.
+    # `point` is what the ECMAScript algorithm calls `n`: digits left of it.
     combined = integral + fractional
     point = len(integral) + int(exponent or 0)
 
-    # Leading zeros are not significant digits; each one dropped moves the
-    # decimal point left by one place.
+    # Leading zeros are not significant; each dropped moves the point left.
     stripped = combined.lstrip("0")
     point -= len(combined) - len(stripped)
 

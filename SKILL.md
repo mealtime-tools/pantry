@@ -17,7 +17,8 @@ is reported as per 100 g and says so in `basis_note`.
 
 `pantry add --input FILE|- --json` accepts one flat JSON object whose `grams`
 is the weight its nutrients describe, 100 g by default. Pantry does not parse
-prose.
+prose. Energy is `kcal` and every other nutrient is grams; there is no `kj`
+key, so state kilojoules as the kcal they convert to.
 
 Unknown output values are `null`. An explicit zero remains zero. Never retry a
 retailer block or bypass bot protection.

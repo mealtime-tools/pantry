@@ -80,8 +80,7 @@ def main(ctx: click.Context, json_output: bool) -> None:
     unless `--grams` names another. No pack or serving size is held. Identity
     is (source, id).
     """
-    # Tests inject prepared dependencies; only build the real ones otherwise.
-    # Replaced rather than mutated so one injected set can serve several runs.
+    # Injected deps are replaced, not mutated, so one set can serve two runs.
     if isinstance(ctx.obj, Deps):
         ctx.obj = replace(
             ctx.obj, json_output=ctx.obj.json_output or json_output

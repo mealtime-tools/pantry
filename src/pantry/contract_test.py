@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
+from agentcli import UsageError
 from click.testing import CliRunner
+
+from mealtime_nutrients import CORE_NUTRIENTS
 
 from pantry.cli import main
 from pantry.commands.add import _read_input
@@ -15,8 +18,11 @@ from pantry.open_food_facts import _parse_hit
 from pantry.products import (
     BASIS_GRAMS,
     MILLILITRE_NOTE,
+    NUTRIENT_KEYS,
+    PRODUCT_KEYS,
     UNSTATED_UNIT_NOTE,
     assert_exportable_product,
+    record_keys,
     rescale,
 )
 from pantry.providers import Providers
@@ -34,7 +40,6 @@ _AFCD = {
     "name": "Oat bran, raw",
     "brand": "",
     "kcal": 79.3,
-    "kj": 332,
     "protein": 16.2,
     "fat": 0.8,
     "carbs": 1.6,
@@ -47,7 +52,6 @@ _COLES = {
     "brand": "Coles",
     "url": "https://www.coles.com.au/product/oat-puffs-300g-1516814",
     "kcal": 391,
-    "kj": 1640,
     "protein": 32.1,
     "fat": 2.8,
     "carbs": 55.5,
@@ -58,7 +62,6 @@ _COLES = {
 _PACK = {
     **_COLES,
     "kcal": 1173,
-    "kj": 4920,
     "protein": 96.3,
     "fat": 8.4,
     "carbs": 166.5,
@@ -85,7 +88,7 @@ def _run(tmp_path: Path, args: list[str]) -> dict:
     return json.loads(result.output)["data"]
 
 
-def test_search_accepts_both_shard_vocabularies_and_uses_null_for_missing() -> (
+def test_search_accepts_both_shard_vocabularies_and_omits_the_unstated() -> (
     None
 ):
     result = as_result(
@@ -106,14 +109,53 @@ def test_search_accepts_both_shard_vocabularies_and_uses_null_for_missing() -> (
     assert result["protein"] == 2
     assert result["fat"] == 3
     assert result["fiber"] == 5
-    assert result["sodium"] is None
+    # Unstated, so absent: an absent key and a null one say the same thing.
+    assert "sodium" not in result
+
+
+def test_results_carry_the_core_macros_and_every_stated_nutrient() -> None:
+    """A nutrient a record holds must reach the caller, and named as stored.
+
+    The four are asserted against the constant so widening the vocabulary
+    cannot quietly drop one of them.
+    """
+    afcd_row = {
+        "source": "afcd",
+        "id": "F005580",
+        "name": "Milk, cow, canned, evaporated, reduced fat (~2%)",
+        "brand": "",
+        "kcal": 90.8,
+        "sugar": 10.3,
+    }
+
+    result = as_result(afcd_row)
+
+    assert result["sugar"] == 10.3
+    assert set(CORE_NUTRIENTS) <= set(result)
+    assert "calcium" not in result
+
+
+def test_a_record_is_written_identity_first_then_the_macros() -> None:
+    """Pantry no longer reorders the vocabulary, so it depends on this order."""
+    written = record_keys(_COLES)
+
+    assert written[: len(PRODUCT_KEYS)] == PRODUCT_KEYS
+    assert NUTRIENT_KEYS[: len(CORE_NUTRIENTS)] == CORE_NUTRIENTS
+
+
+def test_no_shard_row_states_energy_in_kilojoules() -> None:
+    """kJ is converted at import; a stored record holds kcal and only kcal."""
+    products = read_shards(data_dir())
+
+    assert products
+    assert all("kj" not in product for product in products)
 
 
 def test_shards_use_one_flat_item_format() -> None:
     products = read_shards(data_dir())
 
     assert len(products) >= 1_500
-    assert all("kcal" in product or "kj" in product for product in products)
+    assert all("kcal" in product for product in products)
     assert not any("nutrients" in product for product in products)
     assert not any("serving_size" in product for product in products)
     assert not any("serving_size_grams" in product for product in products)
@@ -132,6 +174,12 @@ def test_manual_panel_is_json_with_null_and_alias_support() -> None:
         {"kcal": 100.0, "protein": 2.0, "fat": 0.0, "carbs": 4.0},
         None,
     )
+
+
+def test_manual_input_refuses_a_kilojoule_figure() -> None:
+    """kJ is not a stored key, so stating one is a mistake, not a synonym."""
+    with pytest.raises(UsageError):
+        _read_input('{"kcal":100,"kj":418.4}')
 
 
 def test_partial_panels_are_not_filled_with_zero() -> None:
@@ -383,11 +431,11 @@ def test_a_stored_record_and_the_wire_agree_figure_for_figure() -> None:
 
 
 def test_restating_a_record_moves_every_stored_nutrient() -> None:
-    """Including `kj`, which `add --input` accepts and no result emits."""
+    """Energy included: a figure left behind reads as a different food."""
     per_hundred = rescale(_PACK)
 
     assert per_hundred["kcal"] == 391
-    assert per_hundred["kj"] == 1640
+    assert per_hundred["carbs"] == 55.5
     assert per_hundred["protein"] == 32.1
     assert per_hundred["grams"] == BASIS_GRAMS
 

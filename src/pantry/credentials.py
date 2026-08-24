@@ -1,14 +1,10 @@
 """Resolving the FoodData Central key.
 
-Order: `--api-key`, `$USDA_API_KEY`, then `.env`. The real environment comes
-first so an exported variable always beats a stale file.
-
-The key is never logged, echoed, or put in an error message. Only the fact
-that one was found, and where from, is ever printed.
-
-Almost nothing needs this. A USDA food is imported once and its macros are
-frozen into the record, so search, lookup and every recipe afterwards work with
-no credential at all.
+Order: `--api-key`, `$USDA_API_KEY`, then `.env`, so an exported variable beats
+a stale file. The key is never logged, echoed, or put in an error message —
+only that one was found, and from where. Almost nothing needs it: a USDA food
+is imported once and its macros are frozen into the record, so search and
+lookup work with no credential at all.
 """
 
 import os
