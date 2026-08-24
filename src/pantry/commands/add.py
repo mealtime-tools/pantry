@@ -18,6 +18,7 @@ from pantry.ids import normalize_id
 from pantry.local import as_result
 from pantry.nutrition import nutrients_for_storage
 from pantry.products import (
+    NUTRIENT_KEYS,
     PRODUCT_BASES,
     PRODUCT_SOURCES,
     Product,
@@ -105,18 +106,7 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
     ]
 
 
-_PANEL_KEYS = frozenset(
-    {
-        "kcal",
-        "kj",
-        "protein",
-        "fat",
-        "carbs",
-        "fiber",
-        "sodium",
-        "sugar",
-    }
-)
+_PANEL_KEYS = frozenset(NUTRIENT_KEYS)
 
 
 def _read_input(text: str) -> tuple[dict[str, float], float | None]:

@@ -6,13 +6,11 @@ minute. Acquiring a barcode goes through that same cached query rather than a
 second endpoint, so the one rate limit stays in one place.
 """
 
-from pantry.nutrition import NUTRIENTS, nutrients_for_storage
+from pantry.nutrition import nutrients_for_storage
 from pantry.open_food_facts import OpenFoodFacts, RemoteFailure
-from pantry.products import Product
+from pantry.products import NUTRIENT_KEYS, Product
 from pantry.providers import AcquireOptions, Provider, Reference
 from pantry.sites import build_record
-
-NUTRIENT_KEYS = ("kcal", "kj", "protein", "fat", "carbs", *NUTRIENTS)
 
 # The index does not match a barcode as free text — measured: `q=<barcode>`
 # returns nothing — so an exact acquire asks for the field, which answers with
