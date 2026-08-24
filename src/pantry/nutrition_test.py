@@ -148,4 +148,7 @@ def test_the_derived_rows_leave_the_hand_written_order_alone() -> None:
     """Appended, so no derived name may claim a row the rules above own."""
     assert panel_from_rows([("- Saturated", "0.6g")]) == {"saturated_fat": 0.6}
     assert panel_from_rows([("Fat, Total", "3.6g")]) == {"fat": 3.6}
+    assert panel_from_rows([("Monounsaturated", "1.2g")]) == {
+        "monounsaturated_fat": 1.2
+    }
     assert panel_from_rows([("Sodium Bicarbonate", "(500)")]) == {}

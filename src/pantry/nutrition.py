@@ -7,7 +7,12 @@ of it is a row whose source already separated its name from its value.
 import math
 import re
 
-from mealtime_nutrients import CORE_NUTRIENTS, NUTRIENTS, kcal_from_kj
+from mealtime_nutrients import (
+    CORE_NUTRIENTS,
+    NUTRIENTS,
+    kcal_from_kj,
+    row_pattern,
+)
 
 # A label prints its mineral rows in milligrams and its vitamin rows in
 # micrograms; a record holds grams. This is the only place those units meet,
@@ -58,11 +63,11 @@ _SODIUM_NAME = re.compile(r"^\s*sodium\b[\s(]*(?:mg|g)?\)?\s*$", re.IGNORECASE)
 # missing unit.
 _NAME_UNIT = re.compile(r"\(?\b(mcg|µg|μg|mg|g)\b\)?\s*$", re.IGNORECASE)
 
-# The rows this parser recognizes, in the order it tries them. First match
+# The rows this parser hand-writes, in the order it tries them. First match
 # wins, and every rule below sits where it does because a later one would
 # otherwise claim the row: a sub-row before the total it sits under, and the
 # skip rule before the row whose word it accidentally contains.
-_ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
+_HAND_WRITTEN: tuple[tuple[str, re.Pattern[str]], ...] = (
     # Read, unlike the salt row below it: salt is 2.5 times its sodium, so
     # taking one for the other would overstate the figure by 150 percent.
     ("sodium", _SODIUM_ROW),
@@ -88,21 +93,27 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("kcal", re.compile(r"energy|kilojoule|calorie", re.IGNORECASE)),
 )
 
-# The vitamins and minerals, whose row names are their wire names with a space
-# for the underscore. Derived so a name added upstream is read here too, and
-# longest first so "Vitamin B12" cannot be claimed by a shorter neighbour.
-_UNCOVERED: set[str] = (
-    set(NUTRIENTS) - {key for key, _ in _ROWS} - set(CORE_NUTRIENTS)
-)
 
-_DERIVED_ROWS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
-    (name, re.compile(name.replace("_", r"[\s-]?"), re.IGNORECASE))
-    for name in sorted(_UNCOVERED, key=lambda name: -len(name))
-)
+def _named_rows() -> tuple[tuple[str, re.Pattern[str]], ...]:
+    """Every wire name no rule above claims, matched as a label spells it.
+
+    The vitamins and minerals, in practice. The spelling is the library's, so
+    a name added upstream is read here without an edit; the order is ours:
+    longest first, so "Vitamin B12" cannot be claimed by a shorter neighbour,
+    then alphabetical, so a set's iteration order never decides a tie.
+    """
+    claimed = {key for key, _ in _HAND_WRITTEN}
+    names = sorted(
+        set(NUTRIENTS) - claimed, key=lambda name: (-len(name), name)
+    )
+    return tuple(
+        (name, re.compile(row_pattern(name), re.IGNORECASE)) for name in names
+    )
+
 
 # Appended, never inserted: every ordering guarantee above depends on the
 # hand-written rules being tried first.
-_ROWS = _ROWS + _DERIVED_ROWS
+_ROWS: tuple[tuple[str, re.Pattern[str]], ...] = _HAND_WRITTEN + _named_rows()
 
 
 class NutritionError(ValueError):
