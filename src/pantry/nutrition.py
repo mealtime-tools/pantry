@@ -7,7 +7,7 @@ of it is a row whose source already separated its name from its value.
 import math
 import re
 
-_KJ_PER_KCAL = 0.239006
+from mealtime_nutrients import kcal_from_kj
 
 # A label prints its mineral rows in milligrams; a record holds grams. This is
 # the only place the two units meet, because it is the only place a unit is
@@ -97,7 +97,7 @@ def _quantities(text: str) -> list[tuple[float, str]]:
 
 def energy_to_kcal(value: float, unit: str) -> float:
     """Normalize an energy figure to calories, whichever unit was used."""
-    return value * _KJ_PER_KCAL if unit.lower() == "kj" else value
+    return kcal_from_kj(value) if unit.lower() == "kj" else value
 
 
 def _row_key(label: str) -> str | None:

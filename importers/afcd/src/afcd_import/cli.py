@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+from mealtime_nutrients import KJ_PER_KCAL
 from openpyxl import load_workbook
 
 DETAILS_SHEET = "Food details"
@@ -135,9 +136,14 @@ def number_value(value: Any, row: int, label: str) -> float | int:
     return int(number) if number.is_integer() else number
 
 
+# The shared ratio, read as a decimal so the division is exact rather than
+# carrying the binary noise a float divide would write into the shard.
+JOULE_RATIO = Decimal(str(KJ_PER_KCAL))
+
+
 def kcal_from_kj(value: float) -> float | int:
     """Convert kilojoules to kilocalories rounded to 0.1."""
-    kcal = (Decimal(str(value)) / Decimal("4.184")).quantize(
+    kcal = (Decimal(str(value)) / JOULE_RATIO).quantize(
         Decimal("0.1"), rounding=ROUND_HALF_UP
     )
     return int(kcal) if kcal == kcal.to_integral() else float(kcal)

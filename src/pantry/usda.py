@@ -18,6 +18,7 @@ import urllib.request
 from typing import Any
 
 from agentcli import RemoteError
+from mealtime_nutrients import kcal_from_kj
 
 from pantry.products import BASIS_GRAMS, Product
 
@@ -44,8 +45,6 @@ NUTRIENT_IDS = {
 MILLIGRAM_IDS = frozenset({1093})
 
 MG_PER_G = 1000
-
-KCAL_PER_KJ = 1 / 4.184
 
 
 def _grams(nutrient_id: int, amount: float) -> float:
@@ -81,7 +80,7 @@ def _energy_kcal(amounts: dict[int, float]) -> float:
     if KCAL_ID in amounts:
         return amounts[KCAL_ID]
     if KJ_ID in amounts:
-        return round(amounts[KJ_ID] * KCAL_PER_KJ, 1)
+        return round(kcal_from_kj(amounts[KJ_ID]), 1)
 
     raise RemoteError("the USDA record carries no energy figure")
 
