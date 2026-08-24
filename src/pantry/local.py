@@ -15,9 +15,12 @@ from collections import defaultdict
 from rapidfuzz import fuzz, process
 
 from pantry.ids import id_sort_key
-from pantry.products import BASIS_GRAMS, PRODUCT_SOURCES, Product
-
-NUTRIENT_KEYS = ("kcal", "protein", "fat", "carbs", "fiber", "sodium", "sugar")
+from pantry.products import (
+    BASIS_GRAMS,
+    NUTRIENT_KEYS,
+    PRODUCT_SOURCES,
+    Product,
+)
 
 
 def result_with_nulls(result: dict) -> dict:

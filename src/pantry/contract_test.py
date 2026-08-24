@@ -15,6 +15,7 @@ from pantry.open_food_facts import _parse_hit
 from pantry.products import (
     BASIS_GRAMS,
     MILLILITRE_NOTE,
+    NUTRIENT_KEYS,
     UNSTATED_UNIT_NOTE,
     assert_exportable_product,
     rescale,
@@ -107,6 +108,27 @@ def test_search_accepts_both_shard_vocabularies_and_uses_null_for_missing() -> (
     assert result["fat"] == 3
     assert result["fiber"] == 5
     assert result["sodium"] is None
+
+
+def test_results_carry_every_stored_nutrient() -> None:
+    """A nutrient a record holds must reach the caller, kilojoules included.
+
+    An AFCD row states kilojoules, so a result that drops the key hides a
+    figure the shard really carries.
+    """
+    afcd_row = {
+        "source": "afcd",
+        "id": "F005580",
+        "name": "Milk, cow, canned, evaporated, reduced fat (~2%)",
+        "brand": "",
+        "kcal": 90.8,
+        "kj": 380,
+    }
+
+    result = as_result(afcd_row)
+
+    assert result["kj"] == 380
+    assert set(NUTRIENT_KEYS) <= set(result)
 
 
 def test_shards_use_one_flat_item_format() -> None:
