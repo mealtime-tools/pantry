@@ -7,19 +7,21 @@ of it is a row whose source already separated its name from its value.
 import math
 import re
 
-from mealtime_nutrients import kcal_from_kj
+from mealtime_nutrients import CORE_NUTRIENTS, NUTRIENTS, kcal_from_kj
 
-# A label prints its mineral rows in milligrams; a record holds grams. This is
-# the only place the two units meet, because it is the only place a unit is
-# read off a human-written line.
-_MG_PER_G = 1000
+# A label prints its mineral rows in milligrams and its vitamin rows in
+# micrograms; a record holds grams. This is the only place those units meet,
+# because it is the only place a unit is read off a human-written line.
+_UNITS_PER_GRAM = {
+    "mg": 1000,
+    "mcg": 1_000_000,
+    "µg": 1_000_000,
+    "μg": 1_000_000,
+}
 
-# Every nutrient a record may carry beyond energy and the four macros, mapped
-# to whether the figure implies food energy. Adding one is this single line:
-# the write order sorts it, and every check treats it like its neighbours. A
-# name absent from here is refused rather than stored, because a misspelled key
-# stores cleanly and then no consumer ever finds the nutrient again.
-NUTRIENTS = {"fiber": True, "sodium": False, "sugar": True}
+# Places enough to hold a converted microgram: 2.4 µg is 2.4e-06 g, which six
+# places would quantise to a figure reading 17 percent low.
+GRAM_PLACES = 12
 
 # No food exceeds pure fat, which is 900 kcal per 100 g.
 _MAX_KCAL_PER_100G = 900
@@ -27,8 +29,12 @@ _MAX_KCAL_PER_100G = 900
 # Rounding on a label lets the three macros total slightly over 100 g.
 _MASS_TOLERANCE = 105
 
+# Both spellings of micro are listed: the micro sign and the Greek mu look
+# identical and labels are copied from both. Without them the trailing \b
+# backtracks into the number and "1.2µg" reads as a bare 1.0.
 _QUANTITY = re.compile(
-    r"(-?[\d,]+(?:\.\d+)?)\s*(kcal|cal|kj|mg|g|ml)?\b", re.IGNORECASE
+    r"(-?[\d,]+(?:\.\d+)?)\s*(kcal|cal|kj|mcg|µg|μg|mg|g|ml)?\b",
+    re.IGNORECASE,
 )
 
 # The sodium row, and only the sodium row: the word opens the line and its
@@ -50,26 +56,30 @@ _SODIUM_NAME = re.compile(r"^\s*sodium\b[\s(]*(?:mg|g)?\)?\s*$", re.IGNORECASE)
 # A structured source often puts the unit in the row name -- "Sodium (mg)"
 # against a bare 400 -- which is the same figure stated a different way, not a
 # missing unit.
-_NAME_UNIT = re.compile(r"\(?\b(mg|g)\b\)?\s*$", re.IGNORECASE)
+_NAME_UNIT = re.compile(r"\(?\b(mcg|µg|μg|mg|g)\b\)?\s*$", re.IGNORECASE)
 
 # The rows this parser recognizes, in the order it tries them. First match
-# wins, so sodium leads: any other line naming it is skipped on the next rule,
-# which is what keeps "Sodium Bicarbonate (500)" out of the *carbs* row it
-# would otherwise match on "bicarbonate". Skipped rows come next: "-
-# Saturated" would otherwise match the fat row, and "Sugars" and "Dietary
-# Fibre" both sit under carbohydrate on a label.
+# wins, and every rule below sits where it does because a later one would
+# otherwise claim the row: a sub-row before the total it sits under, and the
+# skip rule before the row whose word it accidentally contains.
 _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # Read, unlike the salt row below it: salt is 2.5 times its sodium, so
     # taking one for the other would overstate the figure by 150 percent.
     ("sodium", _SODIUM_ROW),
-    (
-        "skip",
-        re.compile(
-            r"saturat|trans|monounsat|polyunsat|sodium|salt"
-            r"|cholesterol|potassium",
-            re.IGNORECASE,
-        ),
-    ),
+    # Salt is not sodium, and any other line naming sodium is not the sodium
+    # row -- "Sodium Bicarbonate (500)" would reach *carbs* on "bicarbonate".
+    ("skip", re.compile(r"sodium|salt", re.IGNORECASE)),
+    # The fat sub-rows, longest name first: "polyunsaturated" contains
+    # "unsaturated", which contains "saturated". A bare "- Saturated" names no
+    # fat at all, so only the order keeps it off the total below.
+    ("monounsaturated_fat", re.compile(r"mono[\s-]?unsat", re.IGNORECASE)),
+    ("polyunsaturated_fat", re.compile(r"poly[\s-]?unsat", re.IGNORECASE)),
+    ("unsaturated_fat", re.compile(r"unsaturat", re.IGNORECASE)),
+    ("saturated_fat", re.compile(r"saturat", re.IGNORECASE)),
+    ("trans_fat", re.compile(r"trans", re.IGNORECASE)),
+    ("cholesterol", re.compile(r"cholesterol", re.IGNORECASE)),
+    ("potassium", re.compile(r"potassium", re.IGNORECASE)),
+    # "Sugars" and "Dietary Fibre" both sit under carbohydrate on a label.
     ("sugar", re.compile(r"sugar", re.IGNORECASE)),
     ("fiber", re.compile(r"fib(?:re|er)", re.IGNORECASE)),
     ("protein", re.compile(r"protein", re.IGNORECASE)),
@@ -77,6 +87,22 @@ _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("fat", re.compile(r"fat", re.IGNORECASE)),
     ("kcal", re.compile(r"energy|kilojoule|calorie", re.IGNORECASE)),
 )
+
+# The vitamins and minerals, whose row names are their wire names with a space
+# for the underscore. Derived so a name added upstream is read here too, and
+# longest first so "Vitamin B12" cannot be claimed by a shorter neighbour.
+_UNCOVERED: set[str] = (
+    set(NUTRIENTS) - {key for key, _ in _ROWS} - set(CORE_NUTRIENTS)
+)
+
+_DERIVED_ROWS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (name, re.compile(name.replace("_", r"[\s-]?"), re.IGNORECASE))
+    for name in sorted(_UNCOVERED, key=lambda name: -len(name))
+)
+
+# Appended, never inserted: every ordering guarantee above depends on the
+# hand-written rules being tried first.
+_ROWS = _ROWS + _DERIVED_ROWS
 
 
 class NutritionError(ValueError):
@@ -119,13 +145,14 @@ def _in_grams(key: str, chosen: tuple[float, str]) -> float:
     """
     value, unit = chosen
 
-    if key in NUTRIENTS and not unit:
+    if key not in CORE_NUTRIENTS and not unit:
         raise NutritionError(
             f"nutrition panel states {key} with no unit: write"
             f" {value:g}g or {value:g}mg"
         )
 
-    return round(value / _MG_PER_G, 6) if unit == "mg" else value
+    divisor = _UNITS_PER_GRAM.get(unit)
+    return round(value / divisor, GRAM_PLACES) if divisor else value
 
 
 def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:

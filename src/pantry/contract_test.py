@@ -7,6 +7,8 @@ import pytest
 from agentcli import UsageError
 from click.testing import CliRunner
 
+from mealtime_nutrients import CORE_NUTRIENTS
+
 from pantry.cli import main
 from pantry.commands.add import _read_input
 from pantry.data import data_dir, read_shards
@@ -16,7 +18,6 @@ from pantry.open_food_facts import _parse_hit
 from pantry.products import (
     BASIS_GRAMS,
     MILLILITRE_NOTE,
-    NUTRIENT_KEYS,
     UNSTATED_UNIT_NOTE,
     assert_exportable_product,
     rescale,
@@ -84,7 +85,7 @@ def _run(tmp_path: Path, args: list[str]) -> dict:
     return json.loads(result.output)["data"]
 
 
-def test_search_accepts_both_shard_vocabularies_and_uses_null_for_missing() -> (
+def test_search_accepts_both_shard_vocabularies_and_omits_the_unstated() -> (
     None
 ):
     result = as_result(
@@ -105,14 +106,15 @@ def test_search_accepts_both_shard_vocabularies_and_uses_null_for_missing() -> (
     assert result["protein"] == 2
     assert result["fat"] == 3
     assert result["fiber"] == 5
-    assert result["sodium"] is None
+    # Unstated, so absent: an absent key and a null one say the same thing.
+    assert "sodium" not in result
 
 
-def test_results_carry_every_stored_nutrient() -> None:
+def test_results_carry_the_core_macros_and_every_stated_nutrient() -> None:
     """A nutrient a record holds must reach the caller, and named as stored.
 
-    Asserted against the constant rather than a key list, so a nutrient added
-    to the vocabulary cannot silently stop being surfaced here.
+    The four are asserted against the constant so widening the vocabulary
+    cannot quietly drop one of them.
     """
     afcd_row = {
         "source": "afcd",
@@ -126,7 +128,8 @@ def test_results_carry_every_stored_nutrient() -> None:
     result = as_result(afcd_row)
 
     assert result["sugar"] == 10.3
-    assert set(NUTRIENT_KEYS) <= set(result)
+    assert set(CORE_NUTRIENTS) <= set(result)
+    assert "calcium" not in result
 
 
 def test_no_shard_row_states_energy_in_kilojoules() -> None:

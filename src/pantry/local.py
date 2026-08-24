@@ -14,6 +14,8 @@ from collections import defaultdict
 
 from rapidfuzz import fuzz, process
 
+from mealtime_nutrients import CORE_NUTRIENTS
+
 from pantry.ids import id_sort_key
 from pantry.products import (
     BASIS_GRAMS,
@@ -24,9 +26,14 @@ from pantry.products import (
 
 
 def result_with_nulls(result: dict) -> dict:
-    """Complete a provider search result without inventing measurements."""
+    """Complete a provider search result without inventing measurements.
+
+    Only the four that are always present: an absent nutrient and a null one
+    say the same thing, so spelling out the rest of the vocabulary would be
+    tens of keys per row carrying no answer.
+    """
     shown = dict(result)
-    for key in NUTRIENT_KEYS:
+    for key in CORE_NUTRIENTS:
         shown[key] = shown.get(key)
     return shown
 
@@ -63,7 +70,11 @@ def as_result(product: Product) -> dict:
         "id": product.get("id"),
         "name": name,
         "title": f"{name} ({brand})" if brand else name,
-        **{key: product.get(key) for key in NUTRIENT_KEYS},
+        **{
+            key: product.get(key)
+            for key in NUTRIENT_KEYS
+            if key in CORE_NUTRIENTS or product.get(key) is not None
+        },
     }
     # Beside the nutrients, for the same reason they are stored together: a
     # prepared-basis result that looks identical to an as-sold one is the bug.

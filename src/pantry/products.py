@@ -8,16 +8,18 @@ unconverted, and says so in `basis_note`.
 Structural fields are enumerated because each is validated in its own way.
 Energy and the four macros are enumerated because they are cross-checked
 against each other. Every other nutrient is open, governed by the vocabulary
-in `pantry.nutrition`.
+`mealtime_nutrients` publishes: every one of those is grams, and energy is
+kcal.
 """
 
 import json
 import math
 from typing import Any
 
+from mealtime_nutrients import CORE_NUTRIENTS, NUTRIENTS, kcal_from_kj
+
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
-from pantry.nutrition import NUTRIENTS
 
 # The data owners. `localstore` is deliberately absent: it is a storage
 # layer, and
@@ -52,9 +54,14 @@ PRODUCT_KEYS = (
     "grams",
 )
 
-# Every stored nutrient is a top-level key, in this order. Energy is kcal and
-# only kcal: a source printing kilojoules is converted where it is read.
-NUTRIENT_KEYS = ("kcal", "protein", "fat", "carbs", *NUTRIENTS)
+# Every stored nutrient is a top-level key, in this order: the four that are
+# cross-checked against each other lead, then the rest as the vocabulary sorts
+# them. Energy is kcal and only kcal, because a source printing kilojoules is
+# converted where it is read.
+NUTRIENT_KEYS = (
+    *CORE_NUTRIENTS,
+    *(name for name in NUTRIENTS if name not in CORE_NUTRIENTS),
+)
 
 # Written last, after the figures they qualify, so a line read by eye carries
 # the caveat beside the numbers it applies to.
@@ -189,6 +196,23 @@ def _label(product: Product) -> str:
     return f"{product.get('source')}:{product.get('id')}"
 
 
+def without_kilojoules(product: Product) -> Product:
+    """A record stored before energy was kcal alone, read as kcal alone.
+
+    Records written by an earlier version hold `kj`, which is no longer a key
+    this format defines. Converting on the way in rather than refusing keeps
+    a localstore readable, and the label's own kcal wins where it stated one.
+    """
+    if "kj" not in product:
+        return product
+
+    converted = dict(product)
+    kilojoules = converted.pop("kj")
+    if converted.get("kcal") is None and kilojoules is not None:
+        converted["kcal"] = round(kcal_from_kj(kilojoules), 1)
+    return converted
+
+
 def _check_keys(product: Product) -> None:
     """Refuse a key this format does not define, rather than storing it."""
     unknown = sorted(set(product) - _ALLOWED_KEYS)
@@ -296,6 +320,7 @@ def parse_jsonl(
                 # Placed first so a parsed row already reads in canonical key
                 # order, which is what the shard on disk is written in.
                 parsed = {"source": source, **parsed}
+            parsed = without_kilojoules(parsed)
             assert_identity(parsed)
             _check_keys(parsed)
             # The one key checked on the way in: an unrecognised basis reads
