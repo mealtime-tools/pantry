@@ -80,7 +80,7 @@ def _energy_kcal(amounts: dict[int, float]) -> float:
     if KCAL_ID in amounts:
         return amounts[KCAL_ID]
     if KJ_ID in amounts:
-        return round(kcal_from_kj(amounts[KJ_ID]), 1)
+        return float(round(kcal_from_kj(amounts[KJ_ID]), 1))
 
     raise RemoteError("the USDA record carries no energy figure")
 

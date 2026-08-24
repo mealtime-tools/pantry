@@ -209,7 +209,7 @@ def without_kilojoules(product: Product) -> Product:
     converted = dict(product)
     kilojoules = converted.pop("kj")
     if converted.get("kcal") is None and kilojoules is not None:
-        converted["kcal"] = round(kcal_from_kj(kilojoules), 1)
+        converted["kcal"] = float(round(kcal_from_kj(kilojoules), 1))
     return converted
 
 

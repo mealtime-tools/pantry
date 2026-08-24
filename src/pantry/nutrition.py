@@ -122,8 +122,14 @@ def _quantities(text: str) -> list[tuple[float, str]]:
 
 
 def energy_to_kcal(value: float, unit: str) -> float:
-    """Normalize an energy figure to calories, whichever unit was used."""
-    return kcal_from_kj(value) if unit.lower() == "kj" else value
+    """Normalize an energy figure to calories, whichever unit was used.
+
+    The conversion is exact and the float is taken at the end, because a
+    record still holds floats: this is where the lossy domain begins.
+    """
+    if unit.lower() != "kj":
+        return value
+    return float(kcal_from_kj(value))
 
 
 def _row_key(label: str) -> str | None:

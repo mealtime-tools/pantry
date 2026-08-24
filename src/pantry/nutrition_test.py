@@ -12,7 +12,9 @@ from pantry.nutrition import (
 
 def test_kilojoules_are_divided_by_the_published_ratio() -> None:
     """4.184 exactly. The old 0.239006 reciprocal was rounded, and wrong."""
-    assert energy_to_kcal(1000, "kJ") == 1000 / KJ_PER_KCAL
+    # The ratio is a Decimal; a record still holds floats, so this is where
+    # the figure crosses into the lossy domain.
+    assert energy_to_kcal(1000, "kJ") == float(1000 / KJ_PER_KCAL)
     assert energy_to_kcal(4184, "kj") == 1000
     assert energy_to_kcal(239, "kcal") == 239
 
