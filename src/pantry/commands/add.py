@@ -81,13 +81,10 @@ def _payload(
 def _preserved(held: Product | None, product: Product) -> Product:
     """Keep the fields a held record carries and a new reading does not state.
 
-    `add` rebuilds a record from whatever it was given, which on its own drops
-    every field the new source is silent about — including the basis, which no
-    provider can ever re-supply. There is deliberately no way to remove a
-    field: correcting one means restating it.
-
-    Both readings are per 100 g, so an older sodium figure stands beside a
-    newer energy one and there is nothing left to invalidate.
+    Rebuilding from the new source alone would drop every field it is silent
+    about, the basis included, which no provider can re-supply. Both readings
+    are per 100 g, so an old sodium figure stands beside a new energy one.
+    There is no way to remove a field: correcting one means restating it.
     """
     if not held:
         return product
@@ -220,11 +217,7 @@ def add(
     provider: Provider | None = None
 
     with guard(json_output, lambda: provider.report() if provider else []):
-        # Checked on `is not None` and before the reference is resolved: an
-        # empty note is still a flag that cannot apply here, and refusing it
-        # after a page load would spend a request the user cannot get back.
-        # Nothing on a retailer page or in an API response declares a basis,
-        # so accepting one there would store a claim no source made.
+        # An empty note is still a flag; refusing early spends no page load.
         if (
             basis is not None or basis_note is not None
         ) and input_file is None:
@@ -256,8 +249,7 @@ def add(
         provider = state.providers.get(reference.provider)
         held = state.store.find(reference.source, reference.id)
 
-        # Checked before anything is spent: a record already on disk is not
-        # worth a request the user cannot get back.
+        # Checked before spending: a held record is not worth a request.
         if held and not refresh:
             _emit(_payload(False, "held", held), json_output)
             return
@@ -294,9 +286,7 @@ def _acquire(
         product = _preserved(held, provider.acquire(reference, options))
         changes = _changed_fields(held, product) if held else []
 
-        # A refresh that changed nothing leaves the localstore alone,
-        # so a record
-        # keeps whatever the user corrected by hand.
+        # A refresh that changed nothing keeps a hand-corrected record.
         if held and not changes:
             _emit(
                 _payload(False, "unchanged", held, notes=provider.report()),
@@ -304,8 +294,7 @@ def _acquire(
             )
             return
 
-        # Persisted the moment it parses: a request already spent must never
-        # be lost to a later failure in the same run.
+        # Persisted the moment it parses: a spent request must not be lost.
         state.store.add(product)
         _emit(
             _payload(
@@ -318,8 +307,7 @@ def _acquire(
             json_output,
         )
     finally:
-        # Said every run, successful or not. Under --json it travels inside
-        # the one object instead, so it is not echoed twice.
+        # Said every run; under --json it travels inside the one object.
         if not json_output:
             for note in provider.report():
                 click.echo(note)

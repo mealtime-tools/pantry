@@ -1,11 +1,10 @@
 """Sources of product records, behind one interface.
 
-Every source answers at most two questions — "what matches this text" and
-"give me exactly this" — so the CLI needs four verbs rather than one command
-per source. Capability is a flag rather than a raised error because the search
-fan-out has to decide who to ask before it asks, and a provider whose
-credential is absent has to drop out of that list with no message: being
-unconfigured is not a failure.
+Every source answers at most two questions — "what matches this" and "give me
+exactly this" — so the CLI needs four verbs, not one command per source.
+Capability is a flag rather than a raised error because the fan-out decides who
+to ask before asking, and an unconfigured provider drops out with no message:
+being unconfigured is not a failure.
 """
 
 from dataclasses import dataclass
@@ -16,13 +15,10 @@ from pantry.ids import normalize_id
 from pantry.products import Product
 from pantry.sites import product_ref
 
-# What `--source` selects. These are provider names, not record sources:
-# `local` covers every frozen shard, and one retailer provider reads both
-# supermarkets.
+# What `--source` selects: provider names, not the record sources they write.
 PROVIDER_NAMES = ("local", "openfoodfacts", "usda", "retailer")
 
-# The prefixes an acquire reference may carry, and who claims them. A retailer
-# reference is a url and needs no prefix.
+# Who claims which prefix. A retailer reference is a url and carries none.
 _PREFIXES = {"usda": "usda", "off": "openfoodfacts"}
 
 REF_FORMS = "a retailer url, usda:<fdcId>, or off:<barcode>"
@@ -56,9 +52,7 @@ class Provider:
 
     name = ""
 
-    # Whether using this provider costs a network request. Search asks the
-    # remote ones only under --remote, because that cost is the caller's to
-    # opt into.
+    # Whether this costs a request; search asks those only under --remote.
     remote = True
     searchable = False
     acquirable = False
@@ -119,8 +113,7 @@ def resolve_reference(ref: str) -> Reference:
     """Decide which provider claims a reference, and what identity it names."""
     text = ref.strip()
 
-    # A url is the only form that names its own source, so the site readers
-    # decide which supermarket it is and refuse the ones nothing can read.
+    # A url names its own source, so the site readers decide which it is.
     if text.startswith(("http://", "https://")):
         site = product_ref(text)
         return Reference("retailer", site.source, site.id, site.url)
@@ -134,7 +127,5 @@ def resolve_reference(ref: str) -> Reference:
     if provider == "usda" and not identifier.isdigit():
         raise UsageError("a USDA reference is usda:<fdcId>, digits only")
 
-    # A provider stores under its own name. Filing community data as `manual`
-    # would claim the user read it off a label, and would let their own entry
-    # for the same barcode silently overwrite it.
+    # Stored under the provider's name: `manual` would claim the user read it.
     return Reference(provider, provider, identifier)

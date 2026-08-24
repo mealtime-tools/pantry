@@ -22,11 +22,10 @@ def normalize_id(value: Any) -> str:
 def id_sort_key(value: str) -> tuple[int, int, str]:
     """Order ids deterministically, so a committed shard sorts identically.
 
-    Plain integers compare by magnitude, which for a digit string is length
-    first and codepoint second; anything else compares by codepoint alone and
-    sorts after the integers. Locale collation is deliberately avoided because
-    it varies with the ICU build. Ids differing only by leading zeros stay
-    distinct, and stably ordered after the shorter ids they outrank.
+    Plain integers compare by magnitude — length first, codepoint second;
+    anything else compares by codepoint alone and sorts after them. Locale
+    collation varies with the ICU build, so it is avoided. Ids differing only
+    by leading zeros stay distinct and stably ordered.
     """
     if _DIGITS.match(value):
         return (0, len(value), value)

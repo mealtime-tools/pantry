@@ -1,18 +1,10 @@
 """Coles and Woolworths product pages, and the cost of reading one.
 
-The three rules that live here, in the order they matter:
-
-  1. **A block ends the session.** No retry, no second user agent, no proxy,
-     no captcha solving, no lowered pacing. The user gets four or five loads
-     before a captcha, and looking less like automation would cost them that.
-     When a site says no, the answer is `pantry add --input -`.
-  2. **A hard page budget**, claimed before the request and counted even when
-     the request was refused, because the site served it either way.
-  3. **Polite pacing** between requests. Not a knob to tune downwards.
-
-They are this provider's properties rather than the CLI's: no other source has
-a page to be refused by. `pages.py` holds the machinery and nothing else uses
-it.
+Three rules, this provider's and not the CLI's, since no other source has a
+page to be refused by: a block ends the session — no retry, no second user
+agent, no proxy — because four or five loads is all the user gets before a
+captcha, and the answer then is `pantry add --input -`; the page budget is
+claimed before a request and counted even when refused; requests are paced.
 """
 
 from collections.abc import Callable

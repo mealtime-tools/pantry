@@ -2,11 +2,9 @@
 
 They live under the user's config directory and **never** inside a checkout:
 the base shards cannot be regenerated, so promoting a record into one is a
-deliberate copy rather than something a fetch does by accident.
-
-Both halves use one layout: a directory of `<source>.jsonl` shards whose rows
-take their source from the filename. One format and one reader, so there is
-no second parser to drift.
+deliberate copy, not something a fetch does. Both halves share one layout, a
+directory of `<source>.jsonl` shards taking their source from the filename, so
+there is no second parser to drift.
 """
 
 import os

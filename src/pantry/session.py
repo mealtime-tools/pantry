@@ -21,8 +21,7 @@ from pantry.providers.pages import Blocked, BudgetExhausted
 from pantry.sites import SiteError
 from pantry.store import Store
 
-# A refusal the user caused or must resolve by hand exits 1; a refusal by
-# something remote exits 2. Nothing here is ever retried.
+# A refusal the user must resolve exits 1, a remote one 2. Never retried.
 _EXIT_CODES: tuple[tuple[type[Exception], int], ...] = (
     (Blocked, 2),
     (RemoteFailure, 2),
@@ -68,8 +67,7 @@ def guard(
     try:
         yield
     except click.ClickException as error:
-        # Click would route this to stderr, which a caller reading stdout as
-        # JSON would never see.
+        # Click would route this to stderr, where a JSON caller never looks.
         emit_error(
             _message(error.format_message(), json_output, notes),
             json_output=json_output,

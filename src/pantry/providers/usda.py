@@ -1,12 +1,9 @@
 """FoodData Central: one food, by id, per 100 g.
 
-A documented API with a key and a published rate limit, so none of the
-retailer block rules or page budget apply — there is nothing here to be
-refused by and nothing to pace around.
-
-The key comes from the environment (`$USDA_API_KEY`, then `.env`) and never
-appears in output. Absent, this provider is simply not enabled; a clone with
-no key still builds, tests and runs.
+A documented API with a key and a published rate limit, so no block rule or
+page budget applies: nothing here refuses, and nothing needs pacing. The key
+comes from `$USDA_API_KEY`, then `.env`, and never appears in output. Absent,
+this provider is not enabled, and a clone with no key still builds and tests.
 """
 
 from collections.abc import Mapping

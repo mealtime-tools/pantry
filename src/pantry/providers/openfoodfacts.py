@@ -12,9 +12,7 @@ from pantry.products import NUTRIENT_KEYS, Product
 from pantry.providers import AcquireOptions, Provider, Reference
 from pantry.sites import build_record
 
-# The index does not match a barcode as free text — measured: `q=<barcode>`
-# returns nothing — so an exact acquire asks for the field, which answers with
-# the one row or none.
+# Measured: `q=<barcode>` returns nothing, so an acquire asks for the field.
 _CODE_QUERY = "code:{}"
 
 

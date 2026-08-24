@@ -14,9 +14,7 @@ from mealtime_nutrients import (
     row_pattern,
 )
 
-# A label prints its mineral rows in milligrams and its vitamin rows in
-# micrograms; a record holds grams. This is the only place those units meet,
-# because it is the only place a unit is read off a human-written line.
+# Labels print milligrams and micrograms; a record holds grams. Only here.
 _UNITS_PER_GRAM = {
     "mg": 1000,
     "mcg": 1_000_000,
@@ -24,8 +22,7 @@ _UNITS_PER_GRAM = {
     "μg": 1_000_000,
 }
 
-# Places enough to hold a converted microgram: 2.4 µg is 2.4e-06 g, which six
-# places would quantise to a figure reading 17 percent low.
+# Six places would quantise 2.4 µg, or 2.4e-06 g, 17 percent low.
 GRAM_PLACES = 12
 
 # No food exceeds pure fat, which is 900 kcal per 100 g.
@@ -34,49 +31,30 @@ _MAX_KCAL_PER_100G = 900
 # Rounding on a label lets the three macros total slightly over 100 g.
 _MASS_TOLERANCE = 105
 
-# Both spellings of micro are listed: the micro sign and the Greek mu look
-# identical and labels are copied from both. Without them the trailing \b
-# backtracks into the number and "1.2µg" reads as a bare 1.0.
+# Both spellings of micro, else the trailing \b makes "1.2µg" a bare 1.0.
 _QUANTITY = re.compile(
     r"(-?[\d,]+(?:\.\d+)?)\s*(kcal|cal|kj|mcg|µg|μg|mg|g|ml)?\b",
     re.IGNORECASE,
 )
 
-# The sodium row, and only the sodium row: the word opens the line and its
-# figure follows immediately, with nothing between but the "less than" a trace
-# amount is printed as. Anchored and adjacent so that an ingredient list
-# naming sodium -- "Sodium Bicarbonate (500)" -- falls through to the skip rule
-# instead. A row this does not recognize reads as absent, which is the safe
-# answer: a missing sodium is unknown by contract, a wrong one is not.
+# Anchored and adjacent, so "Sodium Bicarbonate (500)" reaches the skip rule.
 _SODIUM_ROW = re.compile(
     r"^\s*sodium\b:?\s*(?:less\s+than\s+)?[<\d]", re.IGNORECASE
 )
 
-# The same row, named rather than hunted for. A structured source states its
-# nutrient names, so the figure it must be followed by in pasted text -- the
-# thing that keeps "Sodium Bicarbonate (500)" out of a record -- is not needed
-# and would not be there to match.
+# The same row named, not hunted: a stated name needs no adjacent figure.
 _SODIUM_NAME = re.compile(r"^\s*sodium\b[\s(]*(?:mg|g)?\)?\s*$", re.IGNORECASE)
 
-# A structured source often puts the unit in the row name -- "Sodium (mg)"
-# against a bare 400 -- which is the same figure stated a different way, not a
-# missing unit.
+# "Sodium (mg)" against a bare 400 states its unit rather than omitting it.
 _NAME_UNIT = re.compile(r"\(?\b(mcg|µg|μg|mg|g)\b\)?\s*$", re.IGNORECASE)
 
-# The rows this parser hand-writes, in the order it tries them. First match
-# wins, and every rule below sits where it does because a later one would
-# otherwise claim the row: a sub-row before the total it sits under, and the
-# skip rule before the row whose word it accidentally contains.
+# The rows pantry hand-writes, in the order tried: a sub-row above its total.
 _HAND_WRITTEN: tuple[tuple[str, re.Pattern[str]], ...] = (
-    # Read, unlike the salt row below it: salt is 2.5 times its sodium, so
-    # taking one for the other would overstate the figure by 150 percent.
+    # Before the skip rule: salt is 2.5 times its sodium, not the same figure.
     ("sodium", _SODIUM_ROW),
-    # Salt is not sodium, and any other line naming sodium is not the sodium
-    # row -- "Sodium Bicarbonate (500)" would reach *carbs* on "bicarbonate".
+    # "Sodium Bicarbonate (500)" would otherwise reach carbs on "bicarbonate".
     ("skip", re.compile(r"sodium|salt", re.IGNORECASE)),
-    # The fat sub-rows, longest name first: "polyunsaturated" contains
-    # "unsaturated", which contains "saturated". A bare "- Saturated" names no
-    # fat at all, so only the order keeps it off the total below.
+    # Longest first: "polyunsaturated" nests "unsaturated" nests "saturated".
     ("monounsaturated_fat", re.compile(r"mono[\s-]?unsat", re.IGNORECASE)),
     ("polyunsaturated_fat", re.compile(r"poly[\s-]?unsat", re.IGNORECASE)),
     ("unsaturated_fat", re.compile(r"unsaturat", re.IGNORECASE)),
@@ -111,8 +89,7 @@ def _named_rows() -> tuple[tuple[str, re.Pattern[str]], ...]:
     )
 
 
-# Appended, never inserted: every ordering guarantee above depends on the
-# hand-written rules being tried first.
+# Appended, never inserted: the guarantees above need those rules tried first.
 _ROWS: tuple[tuple[str, re.Pattern[str]], ...] = _HAND_WRITTEN + _named_rows()
 
 
@@ -155,10 +132,8 @@ def _in_grams(key: str, chosen: tuple[float, str]) -> float:
 
     A macro is only ever printed in grams, so a bare "Protein 8.5" is not
     ambiguous. Every other nutrient is printed in whichever unit keeps it
-    legible -- sodium in milligrams, the same figure in grams a thousandth of
-    the size -- so a bare number there is a guess between two answers that
-    differ by 1000x, and refusing beats guessing. Rounded because dividing
-    leaves binary-float noise that would be written to the record verbatim.
+    legible, so a bare number there is a guess between answers 1000x apart.
+    Rounded because dividing leaves float noise a record would carry verbatim.
     """
     value, unit = chosen
 
@@ -175,11 +150,10 @@ def _in_grams(key: str, chosen: tuple[float, str]) -> float:
 def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
     """Read a panel whose rows a source already separated for us.
 
-    An API's nutrition table gives a name and a figure per row, so rendering
-    those back into label text only to hunt the name out of it again invents
-    an ambiguity that was never in the data: it is what lets an ingredient
-    list reach these patterns at all. Names are matched whole here, and the
-    figures come straight across.
+    Rendering a structured table back into label text only to hunt the name
+    out of it again invents an ambiguity that was never in the data: it is
+    what lets an ingredient list reach these patterns at all. Names are
+    matched whole here, and the figures come straight across.
     """
     panel: dict[str, float] = {}
 

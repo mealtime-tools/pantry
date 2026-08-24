@@ -202,8 +202,7 @@ def nutrient_products(path: Path) -> dict[str, dict[str, Any]]:
                     row[found[FIELDS["name"]] - 1], row_number, "Food Name"
                 ),
                 "brand": "",
-                # The sheet states kilojoules; a Pantry record holds kcal, so
-                # it is converted here, formatted, and the kJ is not carried.
+                # The sheet states kilojoules; a record holds kcal only.
                 "kcal": shard_kcal(kcal_from_kj(values["kj"])),
                 "protein": values["protein"],
                 "fat": values["fat"],

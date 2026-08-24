@@ -46,15 +46,10 @@ def search(
 ) -> None:
     """Search for QUERY, locally by default.
 
-    A network call has a cost the caller should opt into, so remote providers
-    answer only under --remote. Finding nothing is success: the payload
-    carries an empty list and the exit code stays 0, because "this product is
-    not held" is the answer that makes it safe to check before spending a page
-    load. `--limit` applies per provider, every result carries the `source` it
-    came from, and `sources` names the providers that answered — one with no
-    credential is skipped without a message.
-
-    `--grams` applies to every result alike: one list must not mix bases.
+    A network call is opted into: remote providers answer only under --remote.
+    Finding nothing is success, an empty list and exit 0, so a check before
+    spending a page load is safe. `--limit` is per provider, `sources` names
+    who answered, and `--grams` applies to every result alike: no mixed bases.
     """
     json_output = wants_json(ctx, json_output)
 
