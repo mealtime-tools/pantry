@@ -167,16 +167,13 @@ def _read_energy(
     """Energy is the one row that can carry two units in a single column.
 
     A label writing "1000kJ (239Cal)" already did the arithmetic, and its own
-    calorie figure beats converting the kilojoules ourselves. Both forms are
-    kept when kilojoules were printed: kcal because everything downstream
-    reads it, kj because deriving it back would invent a figure nobody wrote.
+    calorie figure beats converting the kilojoules ourselves. Kilojoules are
+    converted here and not carried: a record holds kcal, and a second spelling
+    of the same figure is one more thing that can disagree with itself.
     """
     calories = [q for q in found if q[1] in ("kcal", "cal")]
     value, unit = (calories or found)[0]
-    unit = unit or "kj"
-    panel["kcal"] = energy_to_kcal(value, unit)
-    if unit == "kj":
-        panel["kj"] = value
+    panel["kcal"] = energy_to_kcal(value, unit or "kj")
 
 
 def nutrients_for_storage(panel: dict[str, float]) -> dict[str, float]:
@@ -186,7 +183,7 @@ def nutrients_for_storage(panel: dict[str, float]) -> dict[str, float]:
             raise NutritionError(f"nutrition panel has invalid {key}: {value}")
         if key == "kcal" and value > _MAX_KCAL_PER_100G:
             raise NutritionError(f"nutrition panel has invalid kcal: {value}")
-        if key not in ("kcal", "kj") and value > 100:
+        if key != "kcal" and value > 100:
             raise NutritionError(f"nutrition panel has invalid {key}: {value}")
 
     macro_vals = [

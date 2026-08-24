@@ -52,8 +52,9 @@ PRODUCT_KEYS = (
     "grams",
 )
 
-# Every stored nutrient is a top-level key, in this order.
-NUTRIENT_KEYS = ("kcal", "kj", "protein", "fat", "carbs", *NUTRIENTS)
+# Every stored nutrient is a top-level key, in this order. Energy is kcal and
+# only kcal: a source printing kilojoules is converted where it is read.
+NUTRIENT_KEYS = ("kcal", "protein", "fat", "carbs", *NUTRIENTS)
 
 # Written last, after the figures they qualify, so a line read by eye carries
 # the caveat beside the numbers it applies to.
@@ -107,7 +108,7 @@ def _restated(key: str, value: Any, factor: float) -> Any:
 def restate(
     nutrients: dict[str, Any], frm: float | None, to: float | None = None
 ) -> dict[str, Any]:
-    """Every nutrient moved from one weight to another, `kj` included."""
+    """Every nutrient moved from one weight to another, energy included."""
     # Zero or absent reads as 100 rather than being divided by.
     factor = (to or BASIS_GRAMS) / (frm or BASIS_GRAMS)
     return {
@@ -214,7 +215,7 @@ def assert_product_record(product: Product) -> None:
 
     # Unconditional: every record is per 100 g, so every ceiling applies.
     for key in NUTRIENT_KEYS:
-        maximum = None if key in ("kcal", "kj") else _MAX_PER_100G
+        maximum = None if key == "kcal" else _MAX_PER_100G
         _check_number(
             product, _label(product), key, optional=True, maximum=maximum
         )
