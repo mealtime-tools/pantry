@@ -106,9 +106,6 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
     ]
 
 
-_PANEL_KEYS = frozenset(NUTRIENT_KEYS)
-
-
 def _read_input(text: str) -> tuple[dict[str, float], float | None]:
     """Read a panel and the weight it describes, 100 g if it names none."""
     try:
@@ -118,12 +115,12 @@ def _read_input(text: str) -> tuple[dict[str, float], float | None]:
 
     if not isinstance(decoded, dict):
         raise UsageError("input must be one JSON object")
-    unknown = sorted(set(decoded) - _PANEL_KEYS - {"grams"})
+    unknown = sorted(set(decoded).difference(NUTRIENT_KEYS, {"grams"}))
     if unknown:
         raise UsageError(f"unknown nutrient keys: {', '.join(unknown)}")
 
     panel: dict[str, float] = {}
-    for key in _PANEL_KEYS:
+    for key in NUTRIENT_KEYS:
         value = decoded.get(key)
         if value is None:
             continue

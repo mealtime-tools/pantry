@@ -18,8 +18,11 @@ from pantry.open_food_facts import _parse_hit
 from pantry.products import (
     BASIS_GRAMS,
     MILLILITRE_NOTE,
+    NUTRIENT_KEYS,
+    PRODUCT_KEYS,
     UNSTATED_UNIT_NOTE,
     assert_exportable_product,
+    record_keys,
     rescale,
 )
 from pantry.providers import Providers
@@ -130,6 +133,14 @@ def test_results_carry_the_core_macros_and_every_stated_nutrient() -> None:
     assert result["sugar"] == 10.3
     assert set(CORE_NUTRIENTS) <= set(result)
     assert "calcium" not in result
+
+
+def test_a_record_is_written_identity_first_then_the_macros() -> None:
+    """Pantry no longer reorders the vocabulary, so it depends on this order."""
+    written = record_keys(_COLES)
+
+    assert written[: len(PRODUCT_KEYS)] == PRODUCT_KEYS
+    assert NUTRIENT_KEYS[: len(CORE_NUTRIENTS)] == CORE_NUTRIENTS
 
 
 def test_no_shard_row_states_energy_in_kilojoules() -> None:

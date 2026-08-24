@@ -16,7 +16,7 @@ import json
 import math
 from typing import Any
 
-from mealtime_nutrients import CORE_NUTRIENTS, NUTRIENTS, kcal_from_kj
+from mealtime_nutrients import NUTRIENTS, kcal_from_kj
 
 from pantry.ids import id_sort_key
 from pantry.jsonfmt import dumps
@@ -54,14 +54,10 @@ PRODUCT_KEYS = (
     "grams",
 )
 
-# Every stored nutrient is a top-level key, in this order: the four that are
-# cross-checked against each other lead, then the rest as the vocabulary sorts
-# them. Energy is kcal and only kcal, because a source printing kilojoules is
-# converted where it is read.
-NUTRIENT_KEYS = (
-    *CORE_NUTRIENTS,
-    *(name for name in NUTRIENTS if name not in CORE_NUTRIENTS),
-)
+# Every stored nutrient is a top-level key, in the vocabulary's own order,
+# which already leads with the four that are cross-checked against each other.
+# Energy is kcal and only kcal: a source printing kilojoules converts on read.
+NUTRIENT_KEYS = NUTRIENTS
 
 # Written last, after the figures they qualify, so a line read by eye carries
 # the caveat beside the numbers it applies to.
