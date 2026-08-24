@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import click
-from mealtime_nutrients import kcal_from_kj as shared_kcal_from_kj
+from mealtime_nutrients import kcal_from_kj
 from openpyxl import load_workbook
 
 DETAILS_SHEET = "Food details"
@@ -136,16 +136,14 @@ def number_value(value: Any, row: int, label: str) -> float | int:
     return int(number) if number.is_integer() else number
 
 
-def kcal_from_kj(value: float) -> float | int:
-    """Convert kilojoules to kilocalories rounded to 0.1.
+def shard_kcal(kilocalories: Decimal) -> float | int:
+    """One energy figure as the shard writes it: a tenth, half-up, int if whole.
 
-    Half-up rather than the banker's rounding `round` would apply, because
-    the shipped shard was built that way and re-rounding must not move a
-    published figure.
+    Half-up rather than the banker's rounding `round` would apply, because the
+    shipped shard was built that way and re-rounding must not move a published
+    figure. This is formatting; the conversion is `kcal_from_kj`.
     """
-    kcal = shared_kcal_from_kj(value).quantize(
-        Decimal("0.1"), rounding=ROUND_HALF_UP
-    )
+    kcal = kilocalories.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
     return int(kcal) if kcal == kcal.to_integral() else float(kcal)
 
 
@@ -205,8 +203,8 @@ def nutrient_products(path: Path) -> dict[str, dict[str, Any]]:
                 ),
                 "brand": "",
                 # The sheet states kilojoules; a Pantry record holds kcal, so
-                # the conversion happens here and the kJ is not carried.
-                "kcal": kcal_from_kj(values["kj"]),
+                # it is converted here, formatted, and the kJ is not carried.
+                "kcal": shard_kcal(kcal_from_kj(values["kj"])),
                 "protein": values["protein"],
                 "fat": values["fat"],
                 "carbs": values["carbs"],
