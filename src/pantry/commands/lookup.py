@@ -1,11 +1,12 @@
 """`pantry lookup` — exact composite-identity lookup."""
 
 import click
-from agentcli import emit, json_option
+from agentcli import json_option
 
 from pantry.commands import grams_option
 from pantry.commands.describe import describe
 from pantry.local import as_result
+from pantry.output import emit
 from pantry.products import PRODUCT_SOURCES, rescale
 from pantry.session import deps, guard, wants_json
 

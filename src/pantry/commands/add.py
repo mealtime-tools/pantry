@@ -11,12 +11,13 @@ import math
 from typing import TextIO
 
 import click
-from agentcli import UsageError, emit, json_option
+from agentcli import UsageError, json_option
 
 from pantry.commands.describe import describe
 from pantry.ids import normalize_id
 from pantry.local import as_result
 from pantry.nutrition import nutrients_for_storage
+from pantry.output import emit
 from pantry.products import (
     NUTRIENT_KEYS,
     PRODUCT_BASES,
