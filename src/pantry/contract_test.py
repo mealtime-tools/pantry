@@ -19,8 +19,11 @@ from pantry.products import (
     MILLILITRE_NOTE,
     NUTRIENT_KEYS,
     PRODUCT_KEYS,
+    PRODUCT_SOURCES,
     UNSTATED_UNIT_NOTE,
     assert_exportable_product,
+    format_jsonl,
+    parse_jsonl,
     record_keys,
     rescale,
 )
@@ -164,6 +167,27 @@ def test_shards_use_one_flat_item_format() -> None:
         product.get("grams", BASIS_GRAMS) == BASIS_GRAMS
         for product in products
     )
+
+
+def test_reading_and_rewriting_a_shard_reproduces_it_byte_for_byte() -> None:
+    """A shard cannot be regenerated, so a round trip must not touch one.
+
+    Every present shard is checked, so a private `coles.jsonl` in a working
+    checkout is covered without the shipped AFCD one ever being optional.
+    """
+    checked = 0
+
+    for source in PRODUCT_SOURCES:
+        path = data_dir() / f"{source}.jsonl"
+        if not path.is_file():
+            continue
+
+        text = path.read_text(encoding="utf-8")
+        rewritten = format_jsonl(parse_jsonl(text, source=source), source)
+        assert rewritten == text, f"{path} would not be written back as it is"
+        checked += 1
+
+    assert checked, "no shard was there to check"
 
 
 def test_manual_panel_is_json_with_null_and_alias_support() -> None:
