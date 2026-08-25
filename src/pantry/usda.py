@@ -11,12 +11,13 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
+from decimal import Decimal
 from typing import Any
 
 from agentcli import RemoteError
 from mealtime_nutrients import kcal_from_kj
 
-from pantry.products import BASIS_GRAMS, Product
+from pantry.products import BASIS_GRAMS, Figure, Product, as_decimal
 
 BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 
@@ -37,23 +38,20 @@ NUTRIENT_IDS = {
 # The ids published in milligrams, stated because `unitName` may be absent.
 MILLIGRAM_IDS = frozenset({1093})
 
-MG_PER_G = 1000
+# Milligrams to grams is three decimal places, and moving them loses nothing.
+MG_SHIFT = 3
 
 
-def _grams(nutrient_id: int, amount: float) -> float:
-    """One figure in the unit a record holds, whatever the API published.
-
-    Rounded because dividing leaves binary-float noise that would be written
-    into the record verbatim.
-    """
+def _grams(nutrient_id: int, amount: Decimal) -> Decimal:
+    """One figure in the unit a record holds, whatever the API published."""
     if nutrient_id not in MILLIGRAM_IDS:
         return amount
-    return round(amount / MG_PER_G, 6)
+    return amount.scaleb(-MG_SHIFT)
 
 
-def _amounts(food: dict[str, Any]) -> dict[int, float]:
+def _amounts(food: dict[str, Any]) -> dict[int, Decimal]:
     """Nutrient id to per-100 g amount, keeping only usable figures."""
-    found: dict[int, float] = {}
+    found: dict[int, Decimal] = {}
     for entry in food.get("foodNutrients") or []:
         nutrient = entry.get("nutrient") or {}
         amount = entry.get("amount")
@@ -61,19 +59,20 @@ def _amounts(food: dict[str, Any]) -> dict[int, float]:
         # A missing or non-numeric amount is absent, never zero.
         if not isinstance(nutrient.get("id"), int):
             continue
-        if not isinstance(amount, (int, float)) or isinstance(amount, bool):
+        try:
+            found[nutrient["id"]] = as_decimal(amount)
+        except ValueError:
             continue
-        found[nutrient["id"]] = float(amount)
 
     return found
 
 
-def _energy_kcal(amounts: dict[int, float]) -> float:
+def _energy_kcal(amounts: dict[int, Decimal]) -> Figure:
     """Energy in kcal, converted from kJ only when kcal is absent."""
     if KCAL_ID in amounts:
         return amounts[KCAL_ID]
     if KJ_ID in amounts:
-        return float(round(kcal_from_kj(amounts[KJ_ID]), 1))
+        return round(kcal_from_kj(amounts[KJ_ID]), 1)
 
     raise RemoteError("the USDA record carries no energy figure")
 
@@ -148,7 +147,10 @@ def fetch_food(
 
     try:
         with open_url(request, timeout=TIMEOUT_S) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+            # Decimal, so an amount arrives as the digits the API published.
+            payload = json.loads(
+                response.read().decode("utf-8"), parse_float=Decimal
+            )
     except urllib.error.HTTPError as exc:
         # The key is in the url, so the url never reaches the message.
         raise RemoteError(

@@ -1,11 +1,14 @@
 """`pantry search` — one query, every provider that is willing to answer."""
 
+from decimal import Decimal
+
 import click
-from agentcli import emit, json_option, limit_option
+from agentcli import json_option, limit_option
 
 from pantry.commands import grams_option
 from pantry.commands.describe import describe
 from pantry.local import result_with_nulls
+from pantry.output import emit
 from pantry.products import rescale
 from pantry.providers import PROVIDER_NAMES
 from pantry.session import deps, guard, wants_json
@@ -40,7 +43,7 @@ def search(
     query: tuple[str, ...],
     sources: tuple[str, ...],
     remote: bool,
-    grams: float | None,
+    grams: Decimal | None,
     json_output: bool,
     limit: int,
 ) -> None:

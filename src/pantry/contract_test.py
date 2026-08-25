@@ -1,6 +1,7 @@
 """The small public contract Pantry must keep."""
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,11 @@ from pantry.products import (
     MILLILITRE_NOTE,
     NUTRIENT_KEYS,
     PRODUCT_KEYS,
+    PRODUCT_SOURCES,
     UNSTATED_UNIT_NOTE,
     assert_exportable_product,
+    format_jsonl,
+    parse_jsonl,
     record_keys,
     rescale,
 )
@@ -38,10 +42,10 @@ _AFCD = {
     "id": "F000002",
     "name": "Oat bran, raw",
     "brand": "",
-    "kcal": 79.3,
-    "protein": 16.2,
-    "fat": 0.8,
-    "carbs": 1.6,
+    "kcal": Decimal("79.3"),
+    "protein": Decimal("16.2"),
+    "fat": Decimal("0.8"),
+    "carbs": Decimal("1.6"),
 }
 
 _COLES = {
@@ -51,9 +55,9 @@ _COLES = {
     "brand": "Coles",
     "url": "https://www.coles.com.au/product/oat-puffs-300g-1516814",
     "kcal": 391,
-    "protein": 32.1,
-    "fat": 2.8,
-    "carbs": 55.5,
+    "protein": Decimal("32.1"),
+    "fat": Decimal("2.8"),
+    "carbs": Decimal("55.5"),
     "grams": 100,
 }
 
@@ -61,9 +65,9 @@ _COLES = {
 _PACK = {
     **_COLES,
     "kcal": 1173,
-    "protein": 96.3,
-    "fat": 8.4,
-    "carbs": 166.5,
+    "protein": Decimal("96.3"),
+    "fat": Decimal("8.4"),
+    "carbs": Decimal("166.5"),
     "grams": 300,
 }
 
@@ -123,13 +127,13 @@ def test_results_carry_the_core_macros_and_every_stated_nutrient() -> None:
         "id": "F005580",
         "name": "Milk, cow, canned, evaporated, reduced fat (~2%)",
         "brand": "",
-        "kcal": 90.8,
-        "sugar": 10.3,
+        "kcal": Decimal("90.8"),
+        "sugar": Decimal("10.3"),
     }
 
     result = as_result(afcd_row)
 
-    assert result["sugar"] == 10.3
+    assert result["sugar"] == Decimal("10.3")
     assert set(CORE_NUTRIENTS) <= set(result)
     assert "calcium" not in result
 
@@ -166,11 +170,37 @@ def test_shards_use_one_flat_item_format() -> None:
     )
 
 
+def test_reading_and_rewriting_a_shard_reproduces_it_byte_for_byte() -> None:
+    """A shard cannot be regenerated, so a round trip must not touch one.
+
+    Every present shard is checked, so a private `coles.jsonl` in a working
+    checkout is covered without the shipped AFCD one ever being optional.
+    """
+    checked = 0
+
+    for source in PRODUCT_SOURCES:
+        path = data_dir() / f"{source}.jsonl"
+        if not path.is_file():
+            continue
+
+        text = path.read_text(encoding="utf-8")
+        rewritten = format_jsonl(parse_jsonl(text, source=source), source)
+        assert rewritten == text, f"{path} would not be written back as it is"
+        checked += 1
+
+    assert checked, "no shard was there to check"
+
+
 def test_manual_panel_is_json_with_null_and_alias_support() -> None:
     assert _read_input(
         '{"kcal":100,"protein":2,"fat":0,"carbs":4,"fiber":null}'
     ) == (
-        {"kcal": 100.0, "protein": 2.0, "fat": 0.0, "carbs": 4.0},
+        {
+            "kcal": Decimal("100"),
+            "protein": Decimal("2"),
+            "fat": Decimal("0"),
+            "carbs": Decimal("4"),
+        },
         None,
     )
 
@@ -398,8 +428,8 @@ def test_manual_input_is_normalized_to_the_one_stored_basis(
     stored = store.find("manual", "bar")
     assert stored is not None
     # 335 / 0.9, at the one decimal place energy is stored to everywhere.
-    assert stored["kcal"] == 372.2
-    assert stored["protein"] == 50.666667
+    assert stored["kcal"] == Decimal("372.2")
+    assert stored["protein"] == Decimal("50.666667")
     assert stored["grams"] == BASIS_GRAMS
 
     # And what the caller is handed back is what went in, not a second reading.
@@ -434,17 +464,17 @@ def test_restating_a_record_moves_every_stored_nutrient() -> None:
     per_hundred = rescale(_PACK)
 
     assert per_hundred["kcal"] == 391
-    assert per_hundred["carbs"] == 55.5
-    assert per_hundred["protein"] == 32.1
+    assert per_hundred["carbs"] == Decimal("55.5")
+    assert per_hundred["protein"] == Decimal("32.1")
     assert per_hundred["grams"] == BASIS_GRAMS
 
 
 def test_a_chosen_weight_becomes_the_basis_of_the_figures() -> None:
-    assert rescale(as_result(_AFCD), 42)["kcal"] == 33.306
+    assert rescale(as_result(_AFCD), 42)["kcal"] == Decimal("33.306")
     assert rescale(as_result(_AFCD), 42)["grams"] == 42
 
     scaled = rescale(as_result(_COLES), 42)
-    assert scaled["kcal"] == 164.22
+    assert scaled["kcal"] == Decimal("164.22")
     assert scaled["grams"] == 42
 
     # Asking for the default basis explicitly says so and changes nothing else.
@@ -492,7 +522,7 @@ def test_a_weight_its_figures_cannot_survive_is_refused(
     tmp_path: Path,
 ) -> None:
     """Checked on the result: a weight can be finite and still ruin one."""
-    for value in ("1e308", "5e-324"):
+    for value in ("1e308", "5e-324", "1e999999"):
         for json_output in (True, False):
             result = _invoke(
                 tmp_path,
@@ -508,6 +538,16 @@ def test_a_weight_its_figures_cannot_survive_is_refused(
             assert result.exception is None or isinstance(
                 result.exception, SystemExit
             ), f"{where}: {result.exception!r}"
+
+
+def test_the_wire_carries_plain_json_numbers(tmp_path: Path) -> None:
+    """A figure is a JSON number, so no consumer has to unwrap or parse one."""
+    result = _invoke(tmp_path, ["lookup", "coles", "1516814", "--grams", "40"])
+
+    assert result.exit_code == 0, result.output
+    assert '"kcal":156.4' in result.output
+    assert '"fat":1.12' in result.output
+    assert '"grams":40' in result.output
 
 
 def test_no_pack_size_reaches_the_output(tmp_path: Path) -> None:

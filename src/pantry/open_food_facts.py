@@ -8,16 +8,17 @@ exists because the public index asks for under ten searches a minute.
 
 import hashlib
 import json
-import math
 import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from pantry.jsonfmt import dumps
 from pantry.store import write_atomic
 
 SEARCH_URL = "https://search.openfoodfacts.org/search"
@@ -40,25 +41,27 @@ def cache_dir(
     return base / "pantry" / "open-food-facts"
 
 
-def _number(value: Any) -> float | None:
+def _number(value: Any) -> Decimal | None:
     """Keep only finite, non-negative nutrient values the source supplied.
 
     Six places because the unit is grams: a trace mineral figure is a few
     thousandths of a gram, and fewer places would quantise it down to a zero
-    that reads as "none of it" rather than "hardly any".
+    that reads as "none of it" rather than "hardly any". It is a cap on what
+    the community index states, not a repair: both the payload and the cache
+    are parsed to Decimal, so no float reaches here to be repaired.
     """
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, (int, Decimal, str)):
         return None
     try:
-        parsed = float(value)
-    except ValueError:
+        parsed = Decimal(value)
+    except InvalidOperation:
         return None
-    if not math.isfinite(parsed) or parsed < 0:
+    if not parsed.is_finite() or parsed < 0:
         return None
     return round(parsed, 6)
 
 
-def _nutrients(values: Any) -> dict[str, float]:
+def _nutrients(values: Any) -> dict[str, Decimal]:
     """Convert an Open Food Facts nutrient map to per-100 g names."""
     source = values if isinstance(values, dict) else {}
     mapped = {
@@ -146,13 +149,15 @@ class OpenFoodFacts:
 
     def _cached(self, path: Path) -> list[dict] | None:
         try:
-            record = json.loads(path.read_text(encoding="utf-8"))
+            record = json.loads(
+                path.read_text(encoding="utf-8"), parse_float=Decimal
+            )
         except (OSError, ValueError):
             return None
 
         stamp = record.get("cached_at")
         results = record.get("results")
-        fresh = isinstance(stamp, (int, float))
+        fresh = isinstance(stamp, int) and not isinstance(stamp, bool)
         if not fresh or not isinstance(results, list):
             return None
         return results if self._now() - stamp <= self._ttl else None
@@ -173,8 +178,11 @@ class OpenFoodFacts:
             return cached
 
         results = self._request(query, page_size)
+        # Whole seconds, because a day's TTL needs nothing finer and the one
+        # serializer this package has writes figures, not floats.
         write_atomic(
-            path, json.dumps({"cached_at": self._now(), "results": results})
+            path,
+            dumps({"cached_at": int(self._now()), "results": results}),
         )
         return results
 
@@ -192,7 +200,7 @@ class OpenFoodFacts:
         body = self._get(f"{SEARCH_URL}?{params}")
 
         try:
-            payload = json.loads(body)
+            payload = json.loads(body, parse_float=Decimal)
         except ValueError as cause:
             raise RemoteFailure(
                 "Open Food Facts search returned an invalid response"

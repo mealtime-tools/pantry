@@ -1,11 +1,14 @@
 """`pantry lookup` — exact composite-identity lookup."""
 
+from decimal import Decimal
+
 import click
-from agentcli import emit, json_option
+from agentcli import json_option
 
 from pantry.commands import grams_option
 from pantry.commands.describe import describe
 from pantry.local import as_result
+from pantry.output import emit
 from pantry.products import PRODUCT_SOURCES, rescale
 from pantry.session import deps, guard, wants_json
 
@@ -26,7 +29,7 @@ def lookup(
     ctx: click.Context,
     source: str,
     product_id: str,
-    grams: float | None,
+    grams: Decimal | None,
     json_output: bool,
 ) -> None:
     """Find exactly SOURCE and PRODUCT_ID, with no fuzz and no network.

@@ -8,9 +8,9 @@ offline.
 """
 
 import json
-import math
 import re
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -20,8 +20,13 @@ from pantry.products import (
     BASIS_GRAMS,
     MILLILITRE_NOTE,
     UNSTATED_UNIT_NOTE,
+    Figure,
     Product,
+    as_decimal,
 )
+
+# The one decimal place every shard states energy to.
+_ENERGY_PLACE = Decimal("0.1")
 
 _NEXT_DATA = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
@@ -193,7 +198,7 @@ def build_record(
     product_id: str,
     name: str,
     brand: str,
-    panel: dict[str, float],
+    panel: dict[str, Figure],
     url: str | None = None,
     basis: str | None = None,
     basis_note: str | None = None,
@@ -216,8 +221,10 @@ def build_record(
         key: value for key, value in panel.items() if value is not None
     }
     if panel.get("kcal") is not None:
-        # Match the one-decimal historical shard format.
-        nutrients["kcal"] = math.floor(panel["kcal"] * 10 + 0.5) / 10
+        # Half-up, as the historical shard was written; `round` is half-even.
+        nutrients["kcal"] = as_decimal(panel["kcal"]).quantize(
+            _ENERGY_PLACE, rounding=ROUND_HALF_UP
+        )
     record.update(nutrients)
     record.update({k: v for k, v in optional.items() if v is not None})
     record["grams"] = BASIS_GRAMS
