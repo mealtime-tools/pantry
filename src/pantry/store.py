@@ -106,6 +106,30 @@ class Store:
         kept = [p for p in held if identity(p) != identity(product)]
         write_atomic(shard, format_jsonl([*kept, product], source=source))
 
+    def stored(self, source: str, product_id: str) -> Product | None:
+        """Only the user's own copy, ignoring the frozen shards.
+
+        What may be deleted is exactly this: a shipped row is not the user's
+        to remove, and a correction that shadows one is.
+        """
+        return Local(read_shards(self._store)).find(source, product_id)
+
+    def remove(self, source: str, product_id: str) -> bool:
+        """Drop the user's own record, if the store holds one.
+
+        The shard is rewritten whole for the same reason `_write` does it, and
+        an emptied one is left in place rather than unlinked: an empty shard
+        and an absent shard read identically.
+        """
+        shard = self._store / f"{source}.jsonl"
+        held = read_shard(shard, source)
+        kept = [p for p in held if identity(p) != (source, product_id)]
+        if len(kept) == len(held):
+            return False
+
+        write_atomic(shard, format_jsonl(kept, source=source))
+        return True
+
     def search(self, query: str, limit: int = 10) -> list[dict]:
         """Fuzzy search over both halves.
 

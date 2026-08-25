@@ -20,5 +20,9 @@ is the weight its nutrients describe, 100 g by default. Pantry does not parse
 prose. Energy is `kcal` and every other nutrient is grams; there is no `kj`
 key, so state kilojoules as the kcal they convert to.
 
+`pantry delete SOURCE ID --json` removes one record from the user's own
+store. A shipped record cannot be deleted, and neither can one that was never
+held: both exit 1 with `deleted: false`.
+
 Unknown output values are `null`. An explicit zero remains zero. Never retry a
 retailer block or bypass bot protection.
