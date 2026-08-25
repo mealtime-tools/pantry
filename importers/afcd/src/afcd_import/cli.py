@@ -137,7 +137,7 @@ def number_value(value: Any, row: int, label: str) -> float | int:
 
 
 def shard_kcal(kilocalories: Decimal) -> float | int:
-    """One energy figure as the shard writes it: a tenth, half-up, int if whole.
+    """One figure as the shard writes it: a tenth, half-up, int if whole.
 
     Half-up rather than the banker's rounding `round` would apply, because the
     shipped shard was built that way and re-rounding must not move a published

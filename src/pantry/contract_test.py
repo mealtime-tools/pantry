@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 from agentcli import UsageError
 from click.testing import CliRunner
-
 from mealtime_nutrients import CORE_NUTRIENTS
 
 from pantry.cli import main
@@ -136,7 +135,7 @@ def test_results_carry_the_core_macros_and_every_stated_nutrient() -> None:
 
 
 def test_a_record_is_written_identity_first_then_the_macros() -> None:
-    """Pantry no longer reorders the vocabulary, so it depends on this order."""
+    """Pantry no longer reorders the vocabulary; it depends on this one."""
     written = record_keys(_COLES)
 
     assert written[: len(PRODUCT_KEYS)] == PRODUCT_KEYS

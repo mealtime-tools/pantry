@@ -11,9 +11,8 @@ import re
 import unicodedata
 from collections import defaultdict
 
-from rapidfuzz import fuzz, process
-
 from mealtime_nutrients import CORE_NUTRIENTS
+from rapidfuzz import fuzz, process
 
 from pantry.ids import id_sort_key
 from pantry.products import (

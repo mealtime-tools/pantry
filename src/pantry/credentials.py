@@ -18,7 +18,8 @@ ENV_VAR = "USDA_API_KEY"
 SIGNUP_URL = "https://fdc.nal.usda.gov/api-key-signup.html"
 
 _GUIDANCE = (
-    f"no USDA key found. One is free from {SIGNUP_URL}. Set ${ENV_VAR}, put it "
+    f"no USDA key found. One is free from {SIGNUP_URL}. Set ${ENV_VAR},"
+    " put it"
     f"in .env, or pass --api-key. Only importing a USDA food needs it."
 )
 

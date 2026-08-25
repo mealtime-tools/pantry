@@ -65,3 +65,10 @@ python_files = ["*_test.py"]
 
 [tool.ruff]
 line-length = 79
+
+[tool.ruff.lint]
+# readability's bundled defaults only apply when a project configures no ruff
+# settings, so a bare line-length here would silently drop them all.
+select = ["E", "W", "F", "I", "N"]
+# Renaming a public exception class is a breaking change for a worse name.
+ignore = ["N818"]

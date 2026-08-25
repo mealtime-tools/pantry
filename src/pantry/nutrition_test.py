@@ -131,7 +131,7 @@ def test_a_macro_needs_no_unit_and_every_other_nutrient_does() -> None:
 def test_a_vitamin_or_mineral_row_is_read_from_its_wire_name(
     row: tuple[str, str], expected: dict[str, float]
 ) -> None:
-    """Derived from the vocabulary, so an added name is read without an edit."""
+    """Derived, so a name added upstream is read without an edit here."""
     assert panel_from_rows([row]) == expected
 
 
