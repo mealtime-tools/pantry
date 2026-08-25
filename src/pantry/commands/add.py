@@ -7,7 +7,7 @@ check what is already held, and only then let a provider spend anything.
 """
 
 import json
-import math
+from decimal import Decimal
 from typing import TextIO
 
 import click
@@ -15,6 +15,7 @@ from agentcli import UsageError, json_option
 
 from pantry.commands.describe import describe
 from pantry.ids import normalize_id
+from pantry.jsonfmt import dumps
 from pantry.local import as_result
 from pantry.nutrition import nutrients_for_storage
 from pantry.output import emit
@@ -22,7 +23,9 @@ from pantry.products import (
     NUTRIENT_KEYS,
     PRODUCT_BASES,
     PRODUCT_SOURCES,
+    Figure,
     Product,
+    is_figure,
     record_keys,
     rescale,
     restate,
@@ -97,17 +100,19 @@ def _changed_fields(before: Product, after: Product) -> list[str]:
     # Both records, so a field only one of them holds is still reported.
     merged = {**before, **after}
     keys = [k for k in record_keys(merged) if k not in ("source", "id")]
+    # Serialized rather than `repr`, so a figure reads as the record writes it.
     return [
-        f"{key}: {before.get(key)!r} -> {after.get(key)!r}"
+        f"{key}: {dumps(before.get(key))} -> {dumps(after.get(key))}"
         for key in keys
         if before.get(key) != after.get(key)
     ]
 
 
-def _read_input(text: str) -> tuple[dict[str, float], float | None]:
+def _read_input(text: str) -> tuple[dict[str, Figure], Decimal | None]:
     """Read a panel and the weight it describes, 100 g if it names none."""
     try:
-        decoded = json.loads(text)
+        # Decimal, so a pasted 0.28 is stored as the 0.28 that was written.
+        decoded = json.loads(text, parse_float=Decimal)
     except json.JSONDecodeError as error:
         raise UsageError(f"input must be JSON: {error}") from None
 
@@ -117,27 +122,22 @@ def _read_input(text: str) -> tuple[dict[str, float], float | None]:
     if unknown:
         raise UsageError(f"unknown nutrient keys: {', '.join(unknown)}")
 
-    panel: dict[str, float] = {}
+    panel: dict[str, Figure] = {}
     for key in NUTRIENT_KEYS:
         value = decoded.get(key)
         if value is None:
             continue
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
+        if not isinstance(value, (int, Decimal)) or isinstance(value, bool):
             raise UsageError(f"{key} must be a number or null")
-        if not math.isfinite(value) or value < 0:
+        if not is_figure(value) or value < 0:
             raise UsageError(f"{key} must be non-negative and finite")
-        panel[key] = float(value)
+        panel[key] = Decimal(value)
 
     grams = decoded.get("grams")
     if grams is not None:
-        if (
-            not isinstance(grams, (int, float))
-            or isinstance(grams, bool)
-            or not math.isfinite(grams)
-            or grams <= 0
-        ):
+        if not is_figure(grams) or grams <= 0:
             raise UsageError("grams must be a positive finite number")
-        grams = float(grams)
+        grams = Decimal(grams)
 
     return panel, grams
 

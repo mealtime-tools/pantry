@@ -1,13 +1,17 @@
 """One module per subcommand, plus the flags more than one of them takes."""
 
-import math
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import click
 
 
 class GramsType(click.ParamType):
-    """A weight: positive and finite, which `FloatRange` cannot express."""
+    """A weight: positive and finite, which `FloatRange` cannot express.
+
+    A Decimal, because the figures it restates are decimals: a weight read as
+    a float would put binary noise back into every one of them.
+    """
 
     name = "grams"
 
@@ -16,13 +20,13 @@ class GramsType(click.ParamType):
         value: Any,
         param: click.Parameter | None = None,
         ctx: click.Context | None = None,
-    ) -> float:
+    ) -> Decimal:
         try:
-            weight = float(value)
-        except (TypeError, ValueError):
+            weight = Decimal(str(value))
+        except (TypeError, InvalidOperation):
             self.fail(f"{value!r} is not a number of grams", param, ctx)
 
-        if not math.isfinite(weight) or weight <= 0:
+        if not weight.is_finite() or weight <= 0:
             self.fail(
                 f"{value!r} is not a weight: grams must be positive and "
                 "finite",

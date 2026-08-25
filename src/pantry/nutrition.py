@@ -4,8 +4,8 @@ Everything returned by this file is grams per 100 g, and everything upstream
 of it is a row whose source already separated its name from its value.
 """
 
-import math
 import re
+from decimal import Decimal, InvalidOperation
 
 from mealtime_nutrients import (
     CORE_NUTRIENTS,
@@ -14,16 +14,11 @@ from mealtime_nutrients import (
     row_pattern,
 )
 
-# Labels print milligrams and micrograms; a record holds grams. Only here.
-_UNITS_PER_GRAM = {
-    "mg": 1000,
-    "mcg": 1_000_000,
-    "µg": 1_000_000,
-    "μg": 1_000_000,
-}
+from pantry.products import Figure, is_figure
 
-# Six places would quantise 2.4 µg, or 2.4e-06 g, 17 percent low.
-GRAM_PLACES = 12
+# Labels print milligrams and micrograms; a record holds grams. Only here,
+# and as powers of ten, because shifting a decimal by one of those is exact.
+_GRAM_SHIFT = {"mg": 3, "mcg": 6, "µg": 6, "μg": 6}
 
 # No food exceeds pure fat, which is 900 kcal per 100 g.
 _MAX_KCAL_PER_100G = 900
@@ -97,27 +92,27 @@ class NutritionError(ValueError):
     """A panel that is not worth storing, or a declaration that conflicts."""
 
 
-def _quantities(text: str) -> list[tuple[float, str]]:
+def _quantities(text: str) -> list[tuple[Decimal, str]]:
     """Every number on a line, with whatever unit was written beside it."""
     found = []
     for match in _QUANTITY.finditer(text):
         try:
-            value = float(match.group(1).replace(",", ""))
-        except ValueError:
+            value = Decimal(match.group(1).replace(",", ""))
+        except InvalidOperation:
             continue
         found.append((value, (match.group(2) or "").lower()))
     return found
 
 
-def energy_to_kcal(value: float, unit: str) -> float:
+def energy_to_kcal(value: Figure, unit: str) -> Figure:
     """Normalize an energy figure to calories, whichever unit was used.
 
-    The conversion is exact and the float is taken at the end, because a
-    record still holds floats: this is where the lossy domain begins.
+    Exact throughout: 4.184 is a definition rather than a measurement, and a
+    record holds the decimal it divides into, not a binary approximation.
     """
     if unit.lower() != "kj":
         return value
-    return float(kcal_from_kj(value))
+    return kcal_from_kj(value)
 
 
 def _row_key(label: str) -> str | None:
@@ -127,13 +122,13 @@ def _row_key(label: str) -> str | None:
     return None
 
 
-def _in_grams(key: str, chosen: tuple[float, str]) -> float:
+def _in_grams(key: str, chosen: tuple[Decimal, str]) -> Decimal:
     """One row's figure as the grams a record stores.
 
     A macro is only ever printed in grams, so a bare "Protein 8.5" is not
     ambiguous. Every other nutrient is printed in whichever unit keeps it
     legible, so a bare number there is a guess between answers 1000x apart.
-    Rounded because dividing leaves float noise a record would carry verbatim.
+    Moving the decimal point loses nothing, so nothing is rounded back.
     """
     value, unit = chosen
 
@@ -143,11 +138,11 @@ def _in_grams(key: str, chosen: tuple[float, str]) -> float:
             f" {value:g}g or {value:g}mg"
         )
 
-    divisor = _UNITS_PER_GRAM.get(unit)
-    return round(value / divisor, GRAM_PLACES) if divisor else value
+    shift = _GRAM_SHIFT.get(unit)
+    return value.scaleb(-shift) if shift else value
 
 
-def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
+def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, Figure]:
     """Read a panel whose rows a source already separated for us.
 
     Rendering a structured table back into label text only to hunt the name
@@ -155,14 +150,14 @@ def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
     what lets an ingredient list reach these patterns at all. Names are
     matched whole here, and the figures come straight across.
     """
-    panel: dict[str, float] = {}
+    panel: dict[str, Figure] = {}
 
     for name, value in rows:
         key = "sodium" if _SODIUM_NAME.match(name) else _row_key(name)
         if key is None or key == "skip":
             continue
 
-        found = [q for q in _quantities(value) if math.isfinite(q[0])]
+        found = _quantities(value)
         if not found:
             continue
 
@@ -180,7 +175,7 @@ def panel_from_rows(rows: list[tuple[str, str]]) -> dict[str, float]:
 
 
 def _read_energy(
-    panel: dict[str, float], found: list[tuple[float, str]]
+    panel: dict[str, Figure], found: list[tuple[Decimal, str]]
 ) -> None:
     """Energy is the one row that can carry two units in a single column.
 
@@ -194,10 +189,10 @@ def _read_energy(
     panel["kcal"] = energy_to_kcal(value, unit or "kj")
 
 
-def nutrients_for_storage(panel: dict[str, float]) -> dict[str, float]:
+def nutrients_for_storage(panel: dict[str, Figure]) -> dict[str, Figure]:
     """Validate reported values without filling any missing value."""
     for key, value in panel.items():
-        if not math.isfinite(value) or value < 0:
+        if not is_figure(value) or value < 0:
             raise NutritionError(f"nutrition panel has invalid {key}: {value}")
         if key == "kcal" and value > _MAX_KCAL_PER_100G:
             raise NutritionError(f"nutrition panel has invalid kcal: {value}")

@@ -8,7 +8,8 @@ its own way; every other nutrient is open, governed by the vocabulary.
 """
 
 import json
-import math
+import sys
+from decimal import Decimal
 from typing import Any
 
 from mealtime_nutrients import NUTRIENTS, kcal_from_kj
@@ -56,6 +57,9 @@ UNSTATED_UNIT_NOTE = "per 100 g or 100 mL; the page does not say which"
 
 Product = dict[str, Any]
 
+# What a nutrient figure is: the decimal a label printed, or a whole number.
+Figure = Decimal | int
+
 # The basis every stored record holds, and what absence means on a frozen row.
 BASIS_GRAMS = 100
 
@@ -65,6 +69,11 @@ _MAX_PER_100G = 100
 # Where a restated figure is rounded, the precision every source is read to.
 _PLACES = 6
 
+# The one place this format meets a float. A JSON number is a double to every
+# consumer of it, so a figure no double can hold is refused however exactly a
+# Decimal states it.
+_MAX_FIGURE = Decimal(sys.float_info.max)
+
 # Closed, not open: `sodum` would store cleanly and hide the sodium forever.
 _ALLOWED_KEYS = frozenset((*PRODUCT_KEYS, *NUTRIENT_KEYS, *BASIS_KEYS))
 
@@ -73,16 +82,38 @@ class ProductError(ValueError):
     """A record that would need a compatibility guess to accept."""
 
 
-def _restated(key: str, value: Any, factor: float) -> Any:
+def is_figure(value: Any) -> bool:
+    """True for a number this format holds: a whole number or a decimal."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, Decimal) and value.is_finite()
+
+
+def as_decimal(value: Figure) -> Decimal:
+    """One figure as a Decimal, refusing the float that has no digits.
+
+    A float carries a binary approximation of what a label printed, so
+    admitting one here is how the noise this format exists to keep out gets
+    back in. Every producer states its figures as decimals instead.
+    """
+    if not is_figure(value):
+        raise ProductError(f"{value!r} is not a figure this format holds")
+    return Decimal(value)
+
+
+def _restated(key: str, value: Any, to: Figure, frm: Figure) -> Any:
     """One figure against a new basis, unchanged when unknown or not moving."""
-    if value is None or factor == 1:
+    if value is None or to == frm:
         return value
 
-    moved = value * factor
-    # Neither JSON nor this package's own serializer can express one of these.
-    if not math.isfinite(moved):
+    # Multiplied before dividing: 1173 kcal over 300 g is 391, not 390.999999.
+    moved = as_decimal(value) * as_decimal(to) / as_decimal(frm)
+    if abs(moved) > _MAX_FIGURE:
         raise ProductError(f"{key} does not survive that weight: {moved}")
 
+    # Division terminates in no radix, so a figure still has to stop somewhere.
     restated = round(moved, _PLACES)
     # Zero is reserved for a figure the source itself reported as zero.
     if restated == 0 and value != 0:
@@ -91,18 +122,23 @@ def _restated(key: str, value: Any, factor: float) -> Any:
 
 
 def restate(
-    nutrients: dict[str, Any], frm: float | None, to: float | None = None
+    nutrients: dict[str, Any], frm: Figure | None, to: Figure | None = None
 ) -> dict[str, Any]:
     """Every nutrient moved from one weight to another, energy included."""
     # Zero or absent reads as 100 rather than being divided by.
-    factor = (to or BASIS_GRAMS) / (frm or BASIS_GRAMS)
+    source = frm or BASIS_GRAMS
+    target = to or BASIS_GRAMS
     return {
-        key: _restated(key, value, factor) if key in NUTRIENT_KEYS else value
+        key: (
+            _restated(key, value, target, source)
+            if key in NUTRIENT_KEYS
+            else value
+        )
         for key, value in nutrients.items()
     }
 
 
-def rescale(product: Product, grams: float | None = None) -> Product:
+def rescale(product: Product, grams: Figure | None = None) -> Product:
     """A record stated against `grams`, or per 100 g, always saying which."""
     return {
         **restate(product, product.get("grams"), grams),
@@ -137,7 +173,7 @@ def _check_number(
     label: str,
     key: str,
     optional: bool,
-    maximum: float | None = None,
+    maximum: Figure | None = None,
 ) -> None:
     """Reject a figure that is absent, not a number, negative, or too big."""
     value = values.get(key)
@@ -146,10 +182,9 @@ def _check_number(
             return
         raise ProductError(f"{label} has invalid {key}: None")
 
-    numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
-    if not numeric or not math.isfinite(value) or value < 0:
+    if not is_figure(value) or value < 0:
         raise ProductError(f"{label} has invalid {key}: {value}")
-    if maximum is not None and value > maximum:
+    if value > (_MAX_FIGURE if maximum is None else maximum):
         raise ProductError(f"{label} has implausible {key}: {value}")
 
 
@@ -185,7 +220,7 @@ def without_kilojoules(product: Product) -> Product:
     converted = dict(product)
     kilojoules = converted.pop("kj")
     if converted.get("kcal") is None and kilojoules is not None:
-        converted["kcal"] = float(round(kcal_from_kj(kilojoules), 1))
+        converted["kcal"] = round(kcal_from_kj(kilojoules), 1)
     return converted
 
 
@@ -286,7 +321,8 @@ def parse_jsonl(
         if not line.strip():
             continue
         try:
-            parsed = json.loads(line)
+            # Decimal, so a figure reads back as the digits the line states.
+            parsed = json.loads(line, parse_float=Decimal)
             if source is not None:
                 held = parsed.get("source")
                 if held is not None and held != source:
