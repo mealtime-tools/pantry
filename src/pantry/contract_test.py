@@ -574,3 +574,87 @@ def test_a_retailer_block_stops_the_loader() -> None:
     with pytest.raises(Blocked):
         loader.load("https://example.test")
     assert loader.spent == 1
+
+
+def _added(tmp_path: Path, product_id: str, name: str) -> Deps:
+    """A store holding the two fixtures plus one record of the user's own."""
+    store = Store(lambda: [_AFCD, _COLES], tmp_path / "store")
+    state = Deps(
+        store=store,
+        providers=Providers([LocalProvider(store)]),
+        write_out=lambda path, text: None,
+    )
+    added = CliRunner().invoke(
+        main,
+        ["add", "--input", "-", "--id", product_id, "--name", name, "--json"],
+        input='{"kcal":100,"protein":1,"fat":2,"carbs":3}',
+        obj=state,
+    )
+    assert added.exit_code == 0, added.output
+    return state
+
+
+def test_delete_removes_only_the_users_own_record(tmp_path: Path) -> None:
+    state = _added(tmp_path, "bar", "Bar")
+    runner = CliRunner()
+
+    args = ["delete", "manual", "bar", "--json"]
+    deleted = runner.invoke(main, args, obj=state)
+
+    assert deleted.exit_code == 0, deleted.output
+    payload = json.loads(deleted.output)["data"]
+    assert payload["deleted"] is True
+    assert payload["product"]["name"] == "Bar"
+    assert state.store.find("manual", "bar") is None
+
+    # A second delete is a miss, not a second success.
+    again = runner.invoke(main, args, obj=state)
+    assert again.exit_code == 1
+    assert json.loads(again.output)["data"]["deleted"] is False
+
+
+def test_delete_refuses_a_shipped_record(tmp_path: Path) -> None:
+    result = _invoke(tmp_path, ["delete", "afcd", "F000002"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)["data"]
+    assert payload["deleted"] is False
+    assert payload["reason"] == "shipped"
+    # Still there: the frozen shards are not writable by any command.
+    assert _run(tmp_path, ["lookup", "afcd", "F000002"])["found"] is True
+
+
+def test_delete_says_when_a_shipped_record_becomes_visible_again(
+    tmp_path: Path,
+) -> None:
+    """Deleting a correction restores the shard row it was shadowing."""
+    store = Store(lambda: [_AFCD, _COLES], tmp_path / "store")
+    state = Deps(
+        store=store,
+        providers=Providers([LocalProvider(store)]),
+        write_out=lambda path, text: None,
+    )
+    corrected = CliRunner().invoke(
+        main,
+        [
+            "add",
+            "--input",
+            "-",
+            "https://www.coles.com.au/product/oat-puffs-300g-1516814",
+            "--name",
+            "Oat Puffs Cocoa",
+            "--json",
+        ],
+        input='{"kcal":1,"protein":1,"fat":1,"carbs":1}',
+        obj=state,
+    )
+    assert corrected.exit_code == 0, corrected.output
+
+    deleted = CliRunner().invoke(
+        main, ["delete", "coles", "1516814", "--json"], obj=state
+    )
+
+    assert deleted.exit_code == 0, deleted.output
+    assert json.loads(deleted.output)["data"]["notes"]
+    held = store.find("coles", "1516814")
+    assert held is not None and held["kcal"] == 391

@@ -12,6 +12,7 @@ pantry --json lookup coles 1047 --grams 42 | nutrilog log --input -
 pantry add https://www.coles.com.au/product/example-1047
 pantry add usda:2476857
 pantry add off:0123456789012
+pantry delete manual sourdough
 ```
 
 Nutrients describe the record's `grams`, which every record and result carries
@@ -31,6 +32,10 @@ printf '%s\n' '{"grams":90,"kcal":335,"protein":45.6,"fat":7.9,"carbs":4.9}' |
 
 Unknown standard nutrients are `null`; zero is returned only when the source
 explicitly reported zero.
+
+`pantry delete SOURCE ID` removes a record from that store, and only from
+there: a shipped shard row is refused, and deleting a correction leaves the
+row it shadowed visible again.
 
 The ignored `data/coles.jsonl` scrape is irreplaceable. No command writes to
 package data. Acquired products go to `$XDG_CONFIG_HOME/pantry` or
