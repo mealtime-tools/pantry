@@ -69,9 +69,8 @@ _MAX_PER_100G = 100
 # Where a restated figure is rounded, the precision every source is read to.
 _PLACES = 6
 
-# The one place this format meets a float. A JSON number is a double to every
-# consumer of it, so a figure no double can hold is refused however exactly a
-# Decimal states it.
+# The one place this format meets a float: every consumer reads a JSON number
+# as a double, so this is the largest figure any of them can hold.
 _MAX_FIGURE = Decimal(sys.float_info.max)
 
 # Closed, not open: `sodum` would store cleanly and hide the sodium forever.
@@ -97,8 +96,11 @@ def as_decimal(value: Figure) -> Decimal:
     A float carries a binary approximation of what a label printed, so
     admitting one here is how the noise this format exists to keep out gets
     back in. Every producer states its figures as decimals instead.
+
+    The ceiling is the other side of the same rule, and bounding both sides of
+    a restatement is what keeps its arithmetic inside the decimal context.
     """
-    if not is_figure(value):
+    if not is_figure(value) or abs(value) > _MAX_FIGURE:
         raise ProductError(f"{value!r} is not a figure this format holds")
     return Decimal(value)
 

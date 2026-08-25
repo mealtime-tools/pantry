@@ -522,7 +522,7 @@ def test_a_weight_its_figures_cannot_survive_is_refused(
     tmp_path: Path,
 ) -> None:
     """Checked on the result: a weight can be finite and still ruin one."""
-    for value in ("1e308", "5e-324"):
+    for value in ("1e308", "5e-324", "1e999999"):
         for json_output in (True, False):
             result = _invoke(
                 tmp_path,
