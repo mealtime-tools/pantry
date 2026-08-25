@@ -40,6 +40,14 @@ def test_a_decimal_keeps_the_digits_it_was_given_and_drops_the_padding() -> (
     assert format_number(Decimal("100.000000")) == "100"
 
 
+def test_a_float_is_refused_rather_than_written_with_its_noise() -> None:
+    """A float has no digits of its own, so one arriving here is the bug."""
+    with pytest.raises(TypeError):
+        format_number(0.28)
+    with pytest.raises(TypeError):
+        dumps({"fat": 0.1 + 0.2})
+
+
 def test_a_decimal_that_is_not_a_number_is_refused() -> None:
     for value in ("nan", "inf", "-inf"):
         with pytest.raises(ValueError):

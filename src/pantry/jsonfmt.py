@@ -10,6 +10,10 @@ A figure arrives as a `Decimal`, which already carries the digits and the
 exponent this format is written in terms of, so nothing has to be recovered
 from a `repr`. `json.dumps` cannot write one at all, which is the second
 reason this module exists.
+
+There is deliberately no float branch. A float has no decimal digits of its
+own, so writing one means guessing which it meant; refusing it makes the noise
+this format keeps out a `TypeError` instead of a silently rewritten shard.
 """
 
 import json
@@ -19,7 +23,7 @@ from typing import Any
 # Where ECMAScript leaves positional notation, and Python's `repr` does not.
 _EXPONENTIAL_AT = 21
 
-Number = Decimal | int | float
+Number = Decimal | int
 
 
 def _digits(value: Decimal) -> tuple[str, int]:
@@ -44,18 +48,6 @@ def _exponential(digits: str, point: int) -> str:
     return f"{head}e{'+' if exponent >= 0 else '-'}{abs(exponent)}"
 
 
-def _exact(value: Number) -> Decimal:
-    """One number as the decimal digits it claims to be.
-
-    A float carries no digits of its own, so `repr` supplies them: it is the
-    shortest set that round-trips, which is the same set ECMAScript's
-    `Number::toString` is defined over.
-    """
-    if isinstance(value, float):
-        return Decimal(repr(value))
-    return Decimal(value)
-
-
 def format_number(value: Number) -> str:
     """Format a number exactly as `JSON.stringify` would.
 
@@ -65,16 +57,17 @@ def format_number(value: Number) -> str:
     """
     if isinstance(value, int):
         return str(value)
+    if not isinstance(value, Decimal):
+        raise TypeError(f"cannot serialize {type(value).__name__} as JSON")
 
-    number = _exact(value)
-    if not number.is_finite():
+    if not value.is_finite():
         raise ValueError(f"cannot serialize {value} as JSON")
-    integral = number == number.to_integral_value()
-    if integral and abs(number) < 10**_EXPONENTIAL_AT:
-        return str(int(number))
+    integral = value == value.to_integral_value()
+    if integral and abs(value) < 10**_EXPONENTIAL_AT:
+        return str(int(value))
 
-    sign = "-" if number < 0 else ""
-    digits, point = _digits(abs(number))
+    sign = "-" if value < 0 else ""
+    digits, point = _digits(abs(value))
 
     # The three positional forms, then exponential for everything beyond them.
     if len(digits) <= point <= _EXPONENTIAL_AT:
@@ -99,7 +92,7 @@ def dumps(value: Any) -> str:
         return "true"
     if value is False:
         return "false"
-    if isinstance(value, (int, float, Decimal)):
+    if isinstance(value, (int, Decimal)):
         return format_number(value)
     if isinstance(value, str):
         return json.dumps(value, ensure_ascii=False)
