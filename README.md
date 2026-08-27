@@ -8,7 +8,7 @@ Coles or Woolworths URL, USDA FoodData Central, or Open Food Facts.
 pantry --json search "greek yoghurt"
 pantry --json search "greek yoghurt" --remote
 pantry --json lookup coles 1047
-pantry --json lookup coles 1047 --grams 42 | nutrilog log --input -
+pantry --json lookup coles 1047 --grams 42 | recipes edit "Snack" --input -
 pantry add https://www.coles.com.au/product/example-1047
 pantry add usda:2476857
 pantry add off:0123456789012
@@ -18,7 +18,9 @@ pantry delete manual sourdough
 Nutrients describe the record's `grams`, which every record and result carries
 and which is 100 unless `--grams N` asks for another weight. There is no pack
 size or serving size. A per-100 mL panel is read as per 100 g and says so in
-`basis_note`. Items pipe to Recipes or Nutrilog unchanged.
+`basis_note`. An item is a flat record in the shared
+[item format](https://github.com/mealtime-tools/nutrients/blob/main/FORMAT.md),
+so it pipes unchanged into Recipes, or into whatever tool records what you ate.
 
 Energy is `kcal` and every other nutrient is grams. A panel printing
 kilojoules is converted where it is read, so no record holds a `kj`.

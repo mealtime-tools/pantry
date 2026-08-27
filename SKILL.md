@@ -11,7 +11,7 @@ where `REF` is a retailer URL, `usda:ID`, or `off:BARCODE`.
 
 Nutrients describe the result's `grams`, always present and 100 unless
 `--grams N` on `search` or `lookup` asks for another weight. Pipe the result to
-`recipes edit --input -` or `nutrilog log --input -`; never scale by hand. No
+`recipes edit --input -`, or to whatever tool logs intake; never scale by hand. No
 pack or serving size is held, so supply the weight you mean. A per-100 mL panel
 is reported as per 100 g and says so in `basis_note`.
 
