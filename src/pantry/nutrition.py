@@ -16,8 +16,7 @@ from mealtime_nutrients import (
 
 from pantry.products import Figure, is_figure
 
-# Labels print milligrams and micrograms; a record holds grams. Only here,
-# and as powers of ten, because shifting a decimal by one of those is exact.
+# Labels print mg and µg, records hold grams; powers of ten shift exactly.
 _GRAM_SHIFT = {"mg": 3, "mcg": 6, "µg": 6, "μg": 6}
 
 # No food exceeds pure fat, which is 900 kcal per 100 g.

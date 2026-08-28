@@ -6,8 +6,7 @@ import pytest
 
 from pantry.jsonfmt import dumps, format_number
 
-# Every positional and exponential form ECMAScript's Number::toString takes,
-# with the string `JSON.stringify` produces for it.
+# Every form Number::toString takes, with JSON.stringify's string for it.
 _FORMS = (
     ("0", "0"),
     ("-0", "0"),

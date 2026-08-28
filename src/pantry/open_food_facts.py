@@ -178,8 +178,7 @@ class OpenFoodFacts:
             return cached
 
         results = self._request(query, page_size)
-        # Whole seconds, because a day's TTL needs nothing finer and the one
-        # serializer this package has writes figures, not floats.
+        # Whole seconds: the one serializer here writes figures, not floats.
         write_atomic(
             path,
             dumps({"cached_at": int(self._now()), "results": results}),

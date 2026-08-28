@@ -69,8 +69,7 @@ _MAX_PER_100G = 100
 # Where a restated figure is rounded, the precision every source is read to.
 _PLACES = 6
 
-# The one place this format meets a float: every consumer reads a JSON number
-# as a double, so this is the largest figure any of them can hold.
+# A JSON number is read as a double, so this is the largest figure it holds.
 _MAX_FIGURE = Decimal(sys.float_info.max)
 
 # Closed, not open: `sodum` would store cleanly and hide the sodium forever.
