@@ -2,7 +2,7 @@
 # The distribution name is prefixed because `pantry` is taken on PyPI. The
 # import stays `pantry`.
 name = "mealtime-pantry"
-version = "0.3.4"
+version = "0.3.5"
 description = "Food product records with local fuzzy search, Open Food Facts discovery, and a CLI to add products."
 readme = "README.md"
 license = "MIT"
@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
-dependencies = ["click-agentcli>=0.1.0",
+dependencies = ["click-agentcli>=0.4.1",
     "mealtime-nutrients>=0.3.0",
     "python-dotenv>=1.0", "click>=8.1", "rapidfuzz>=3.9"]
 
