@@ -34,6 +34,74 @@ _GTIN_LENGTHS = frozenset((8, 12, 13, 14))
 _TO_GRAMS = {"GRAMS": Decimal(1), "KILOGRAMS": Decimal(1000)}
 
 
+# Umall is a general store: a quarter of what it lists is nappies, face cream,
+# kitchenware and cleaning products. None of it will ever have a nutrition
+# panel, so holding it inflates every coverage figure and sends a backfill to
+# ask a food database about shower gel.
+#
+# Listed by exact name rather than by keyword, because "Health & Pharmacy"
+# contains supplements and "Dried Groceries" contains food: a substring rule
+# over this taxonomy drops the wrong things. Anything not named here counts as
+# food, so a category the store adds later is kept rather than silently lost.
+NON_FOOD_TYPES = frozenset(
+    name.lower()
+    for name in (
+        "Baby Care",
+        "Bathroom & Accessories",
+        "Bedding & Accessories",
+        "bedside table",
+        "Body Care",
+        "Camping & Outdoor Accessories",
+        "Cleaning Goods",
+        "Cleaning Product",
+        "Clothing & Accessories",
+        "Computer Desk",
+        "Cosmetics",
+        "Cosmetics & Tools",
+        "Dental Care",
+        "Electrical Accessories",
+        "End Table",
+        "Eye & Lip Care",
+        "Face Care",
+        "Feminine Care",
+        "Foot & Hand Care",
+        "Fragrance & Air Freshener",
+        "Furniture & Accessories",
+        "Gardening & Accessories",
+        "Hair Care",
+        "Hair Dye & Styling",
+        "Health & Personal Care",
+        "Home & Accessories",
+        "Home Decor & Living",
+        "Kitchenware & Accessories",
+        "Laundry",
+        "Makeup Remover",
+        "Mobile & Tech Accessories",
+        "Outdoor",
+        "Personal Care & Accessories",
+        "Pets",
+        "Sexual Health",
+        "Skincare Sets",
+        "Stationery & Entertainment",
+        "Storage & Organization",
+        "Sunscreen",
+        "Tableware",
+        "Tableware & Accessories",
+        "Toilet Paper, Tissues & Paper Towels",
+    )
+)
+
+
+def is_food(product_type: str | None) -> bool:
+    """Whether a category is one a nutrition panel could ever describe.
+
+    Alcohol, supplements and gift hampers all count: they have calories, or
+    may contain something that does. Only what is unambiguously not eaten is
+    excluded.
+    """
+    return (product_type or "").strip().lower() not in NON_FOOD_TYPES
+
+
 def _check_digit_holds(barcode: str) -> bool:
     """Whether the last digit is the one the other digits imply."""
     digits = [int(char) for char in barcode][::-1]

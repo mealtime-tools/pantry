@@ -9,7 +9,7 @@ from pantry.catalog import catalog_path, write_catalog
 from pantry.output import emit
 from pantry.providers.umall import RETAILER
 from pantry.session import deps, guard, wants_json
-from pantry.umall import catalog_entry
+from pantry.umall import catalog_entry, is_food
 
 # One retailer publishes a catalogue this cheaply. The argument exists so the
 # second one does not change the command's shape.
@@ -18,8 +18,9 @@ RETAILERS = (RETAILER,)
 
 def _human(payload: dict[str, Any]) -> list[str]:
     return [
-        f"{payload['retailer']}: {payload['products']} products, "
+        f"{payload['retailer']}: {payload['products']} food products, "
         f"{payload['joinable']} with a barcode nutrition can be found by",
+        f"{payload['excluded']} non-food listings left out",
         f"written to {payload['path']} at {payload['fetched_at']}",
     ]
 
@@ -49,7 +50,14 @@ def refresh(ctx: click.Context, retailer: str, json_output: bool) -> None:
         # the store's data, and naming a few thousand of them helps nobody.
         entries = []
         skipped = 0
+        excluded = 0
         for node in state.sweep():
+            # Dropped before parsing: a catalogue of face cream is not a
+            # smaller answer to "what can I eat", it is a wrong denominator.
+            if not is_food(node.get("productType")):
+                excluded += 1
+                continue
+
             entry = catalog_entry(node)
             if entry is None:
                 skipped += 1
@@ -70,6 +78,8 @@ def refresh(ctx: click.Context, retailer: str, json_output: bool) -> None:
                     1 for entry in entries if entry.get("ref")
                 ),
                 "skipped": skipped,
+                # Listed by the store, but not food.
+                "excluded": excluded,
                 "path": str(path),
             },
             json_output=json_output,

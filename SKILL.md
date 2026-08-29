@@ -20,8 +20,11 @@ is the weight its nutrients describe, 100 g by default. Pantry does not parse
 prose. Energy is `kcal` and every other nutrient is grams; there is no `kj`
 key, so state kilojoules as the kcal they convert to.
 
-`pantry refresh umall --json` rebuilds the Umall catalogue: about thirty
-thousand priced rows, a minute of network, replacing whatever was there.
+`pantry refresh umall --json` rebuilds the Umall catalogue: about twenty
+thousand priced food rows, a minute of network, replacing whatever was there.
+Umall also sells cosmetics and kitchenware; those are excluded by category and
+counted as `excluded`, so the catalogue is food and the coverage figures mean
+something.
 `pantry search QUERY --source umall` then reads it offline. Those results add
 `price`, `pack_grams`, `price_per_100g`, `price_per_100kcal`,
 `price_per_g_protein`, `available` and `price_at` to the usual keys; every one
@@ -37,9 +40,10 @@ that catalogue lists, by streaming the 1.3 GB export in one pass. Run it after
 a refresh; it is the only way to answer tens of thousands of barcodes, since
 the public index allows about ten searches a minute. Its report separates
 barcodes absent from the export from ones present with no usable panel, and
-neither is ever filled in with a guess. Coverage is thin: of 25,637 barcodes
-asked about, 4,120 were in the export and 1,737 stored a usable panel — about
-one in fifteen. Treat a panel as a bonus, not the normal case.
+neither is ever filled in with a guess. Coverage is thin and uneven: about one
+joinable barcode in ten stores a panel, and the rate follows where the barcode
+was issued — Thailand 29%, Korea 16%, Japan 8%, China 6%, fresh produce nearly
+none. Treat a panel as a bonus, not the normal case.
 
 The same pass writes what the export concluded about each ingredient list.
 `pantry search --vegetarian` keeps only results it judged vegetarian or vegan;

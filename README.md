@@ -51,8 +51,13 @@ there is no retry, proxy rotation, or CAPTCHA handling.
 
 ## Catalogues
 
-`pantry refresh umall` rebuilds a retailer catalogue: roughly thirty thousand
-products with a barcode, pack weight, price and whether it is in stock. It
+`pantry refresh umall` rebuilds a retailer catalogue: roughly twenty thousand
+food products with a barcode, pack weight, price and whether it is in stock.
+Umall is a general store, so about nine thousand further listings — nappies,
+face cream, kitchenware, laundry — are left out by category. None of them can
+ever carry a nutrition panel, and holding them makes every coverage figure
+describe a denominator that is a quarter shopfitting. A category the store
+adds later counts as food until it is named, so nothing is silently lost. It
 takes about a minute, always uses the network, and replaces what was there —
 a price the store no longer charges is not worth merging forward.
 
@@ -94,10 +99,15 @@ records. This is the only way to answer tens of thousands of barcodes: the
 public index allows about ten searches a minute, which would take days.
 
 Coverage is thin, and the report says so rather than hiding it. Measured
-against the live catalogue: 25,637 barcodes asked about, 4,120 present in the
-export, 1,737 with a usable panel, and 250 with a definite vegetarian verdict.
-That is roughly one panel per fifteen barcodes, so a joined result is the
-exception rather than the rule. It distinguishes the two ways a barcode can fail — absent from
+against the live food catalogue: 17,973 joinable barcodes, of which 1,772 hold
+a usable panel — about one in ten. A joined result is the exception, not the
+rule.
+
+The gaps are not random. Coverage tracks where the barcode was issued, because
+Open Food Facts is thinnest on the Asian market this shop sells: Thailand 29%,
+Korea 16%, Japan 8%, China 6% — and China is over half the catalogue. Fresh
+produce is nearer zero, since it carries codes the shop issued to itself that
+no other database knows. It distinguishes the two ways a barcode can fail — absent from
 the export, or present with no usable panel — because the export is
 community-maintained and carries rows stating things like 6380 kcal per 100 g.
 Those are dropped, never stored, and never allowed to end the download.

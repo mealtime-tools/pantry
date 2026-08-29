@@ -7,6 +7,7 @@ import pytest
 from pantry.umall import (
     catalog_entry,
     is_external_gtin,
+    is_food,
     net_grams,
     price_per_100_grams,
     price_per_100_kcal,
@@ -65,6 +66,48 @@ class TestExternalGtin:
 
     def test_a_none_barcode_is_not_external(self) -> None:
         assert not is_external_gtin(None)
+
+
+class TestIsFood:
+    """A general store lists nappies. A nutrition tool should not hold them."""
+
+    @pytest.mark.parametrize(
+        "category",
+        ["Face Care", "Kitchenware & Accessories", "Laundry", "Pets"],
+    )
+    def test_a_thing_nobody_eats_is_not_food(self, category: str) -> None:
+        assert not is_food(category)
+
+    @pytest.mark.parametrize(
+        "category",
+        ["Tofu & Soy Products", "Instant Noodles", "Dried Groceries"],
+    )
+    def test_a_thing_people_eat_is(self, category: str) -> None:
+        assert is_food(category)
+
+    @pytest.mark.parametrize(
+        "category", ["Alcoholic Drinks", "Health & Pharmacy", "Gift Pack"]
+    )
+    def test_anything_that_may_carry_calories_is_kept(
+        self, category: str
+    ) -> None:
+        """Alcohol has energy, and a hamper may be full of food."""
+        assert is_food(category)
+
+    def test_an_unlisted_category_counts_as_food(self) -> None:
+        """A category the store adds later is kept, not silently dropped."""
+        assert is_food("Artisanal Space Rations")
+
+    def test_a_missing_category_counts_as_food(self) -> None:
+        assert is_food(None)
+        assert is_food("")
+
+    def test_the_name_is_matched_however_it_is_cased_or_spaced(self) -> None:
+        assert not is_food("  face care  ")
+
+    def test_a_keyword_alone_does_not_exclude(self) -> None:
+        """"Care" appears in non-food names; it must not condemn a food one."""
+        assert is_food("Careful Farms Rolled Oats")
 
 
 class TestCatalogEntry:

@@ -91,6 +91,17 @@ def test_the_report_says_how_many_could_be_given_nutrition(
     assert payload["joinable"] == 1
 
 
+def test_a_non_food_listing_is_left_out(tmp_path: Path) -> None:
+    """A catalogue of face cream is a wrong denominator, not a smaller one."""
+    cream = {**NODE, "productType": "Face Care"}
+
+    payload = run(tmp_path, [NODE, cream], ["refresh", "--json"])
+
+    assert payload["products"] == 1
+    assert payload["excluded"] == 1
+    assert payload["skipped"] == 0
+
+
 def test_a_refresh_replaces_the_previous_catalogue(tmp_path: Path) -> None:
     run(tmp_path, [NODE], ["refresh", "--json"])
     run(tmp_path, [], ["refresh", "--json"])
