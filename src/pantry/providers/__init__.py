@@ -16,7 +16,7 @@ from pantry.products import Product
 from pantry.sites import product_ref
 
 # What `--source` selects: provider names, not the record sources they write.
-PROVIDER_NAMES = ("local", "openfoodfacts", "usda", "retailer")
+PROVIDER_NAMES = ("local", "umall", "openfoodfacts", "usda", "retailer")
 
 # Who claims which prefix. A retailer reference is a url and carries none.
 _PREFIXES = {"usda": "usda", "off": "openfoodfacts"}

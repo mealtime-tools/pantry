@@ -133,6 +133,16 @@ class Local:
 
     def search(self, query: str, limit: int = 10) -> list[dict]:
         """Rank products by summed per-word match, best first."""
+        return [as_result(product) for product in self.ranked(query, limit)]
+
+    def ranked(self, query: str, limit: int = 10) -> list[Product]:
+        """The matching records themselves, best first, in their own shape.
+
+        Split from `search` so a caller holding rows that are not products —
+        a retailer catalogue, which carries prices and no nutrition — gets the
+        same matching without a second copy of it. Only `name` and `brand` are
+        read here, which both shapes have.
+        """
         index = self._build()
         tokens = list(dict.fromkeys(_words(query)))
         if not tokens:
@@ -178,7 +188,7 @@ class Local:
                 totals[position] += word_score
 
         ranked = sorted(totals, key=lambda p: self._rank(p, totals[p]))
-        return [as_result(self._products[p]) for p in ranked[:limit]]
+        return [self._products[p] for p in ranked[:limit]]
 
     def _rank(self, position: int, total: float):
         """Score first, then a stable tie-break so output is reproducible."""

@@ -8,9 +8,11 @@ from agentcli import JsonAwareGroup, skill_group
 
 from pantry import data
 from pantry.browser import BrowserTransport, launch_chrome
+from pantry.catalog import catalog_path
 from pantry.commands.add import add
 from pantry.commands.delete import delete
 from pantry.commands.lookup import lookup
+from pantry.commands.refresh import refresh
 from pantry.commands.search import search
 from pantry.open_food_facts import OpenFoodFacts, cache_dir
 from pantry.providers import Providers
@@ -18,6 +20,7 @@ from pantry.providers.local import LocalProvider
 from pantry.providers.openfoodfacts import OpenFoodFactsProvider
 from pantry.providers.pages import PlainTransport, TransportSet
 from pantry.providers.retailer import RetailerProvider
+from pantry.providers.umall import RETAILER, Storefront, UmallProvider
 from pantry.providers.usda import UsdaProvider
 from pantry.session import Deps
 from pantry.store import Store, store_dir, write_atomic
@@ -45,7 +48,7 @@ def _open_transports(browser: bool) -> TransportSet:
     return TransportSet([plain, BrowserTransport(page)], close)
 
 
-def _providers(store: Store) -> Providers:
+def _providers(store: Store, catalogs: Path) -> Providers:
     """Every source this run can use.
 
     Each reads its own credential from the environment, and one without a key
@@ -58,6 +61,7 @@ def _providers(store: Store) -> Providers:
             OpenFoodFactsProvider(OpenFoodFacts(cache_dir())),
             UsdaProvider(),
             RetailerProvider(_open_transports),
+            UmallProvider(store, catalog_path(catalogs, RETAILER)),
         ]
     )
 
@@ -88,12 +92,15 @@ def main(ctx: click.Context, json_output: bool) -> None:
         )
         return
 
-    store = Store(lambda: data.read_shards(data.data_dir()), store_dir())
+    catalogs = store_dir()
+    store = Store(lambda: data.read_shards(data.data_dir()), catalogs)
     ctx.obj = Deps(
         store=store,
-        providers=_providers(store),
+        providers=_providers(store, catalogs),
         write_out=lambda path, text: write_atomic(Path(path), text),
         json_output=json_output,
+        catalog_dir=catalogs,
+        sweep=lambda: Storefront().sweep(),
     )
 
 
@@ -102,6 +109,7 @@ for command in (
     lookup,
     add,
     delete,
+    refresh,
     skill_group(name="pantry", package="pantry"),
 ):
     main.add_command(command)

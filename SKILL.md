@@ -1,6 +1,6 @@
 ---
 name: pantry
-description: Search and acquire food-product nutrition from local retailer data, USDA, Open Food Facts, Coles, and Woolworths.
+description: Search and acquire food-product nutrition from local retailer data, USDA, Open Food Facts, Coles, and Woolworths, and price it against a refreshed retailer catalogue.
 ---
 
 # Pantry
@@ -19,6 +19,18 @@ is reported as per 100 g and says so in `basis_note`.
 is the weight its nutrients describe, 100 g by default. Pantry does not parse
 prose. Energy is `kcal` and every other nutrient is grams; there is no `kj`
 key, so state kilojoules as the kcal they convert to.
+
+`pantry refresh umall --json` rebuilds the Umall catalogue: about thirty
+thousand priced rows, a minute of network, replacing whatever was there.
+`pantry search QUERY --source umall` then reads it offline. Those results add
+`price`, `pack_grams`, `price_per_100g`, `price_per_100kcal`,
+`price_per_g_protein`, `available` and `price_at` to the usual keys; every one
+of them is `null` where the figure it needs is missing, never zero. Pack
+weight is `pack_grams`, never `grams`: `grams` stays the weight the nutrients
+describe. Umall states no nutrition, so a row's panel is empty until
+`pantry add off:<barcode>` stores one — the row carries that reference in
+`ref` when the barcode is one another database could know. Until a refresh has
+run, the provider is absent from `sources` rather than an error.
 
 `pantry delete SOURCE ID --json` removes one record from the user's own
 store. A shipped record cannot be deleted, and neither can one that was never

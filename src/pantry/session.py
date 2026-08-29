@@ -6,12 +6,13 @@ and no home directory.
 """
 
 import contextlib
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
-from agentcli import emit_error
+from agentcli import UsageError, emit_error
 
 from pantry.nutrition import NutritionError
 from pantry.open_food_facts import RemoteFailure
@@ -33,6 +34,17 @@ _EXIT_CODES: tuple[tuple[type[Exception], int], ...] = (
 )
 
 
+def _utc_now() -> str:
+    """The instant a catalogue was read, to the second, in UTC."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _no_sweep() -> Iterator[dict]:
+    """A run that was never given a storefront to sweep."""
+    raise UsageError("this run has no storefront configured to refresh")
+    yield  # pragma: no cover - unreachable, and what makes this a generator
+
+
 @dataclass
 class Deps:
     """The effects the CLI has."""
@@ -41,6 +53,15 @@ class Deps:
     providers: Providers
     write_out: Callable[[Path, str], None]
     json_output: bool = False
+
+    # Where retailer catalogues are written. The store's own directory, so a
+    # user has one place holding everything the tool wrote for them.
+    catalog_dir: Path = Path()
+
+    # The network act `refresh` performs, and the clock that stamps it. Both
+    # are injected so the command is testable with neither.
+    sweep: Callable[[], Iterator[dict]] = _no_sweep
+    now: Callable[[], str] = _utc_now
 
 
 def deps(ctx: click.Context) -> Deps:
