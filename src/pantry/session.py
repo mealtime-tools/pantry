@@ -6,10 +6,11 @@ and no home directory.
 """
 
 import contextlib
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import click
 from agentcli import UsageError, emit_error
@@ -51,6 +52,11 @@ def _no_dump() -> Iterator[str]:
     yield  # pragma: no cover - unreachable, and what makes this a generator
 
 
+def _no_panels(wanted: Iterable[str]) -> Any:
+    """A run that was never given a parquet export to query."""
+    raise UsageError("this run has no product export configured to read")
+
+
 @dataclass
 class Deps:
     """The effects the CLI has."""
@@ -69,8 +75,11 @@ class Deps:
     sweep: Callable[[], Iterator[dict]] = _no_sweep
     now: Callable[[], str] = _utc_now
 
-    # The other network act: the product export a backfill reads, as lines.
+    # The other network act: the product export a backfill reads. Two shapes,
+    # because the two exports are read differently — the CSV streams as lines,
+    # and the parquet is queried for the barcodes wanted.
     dump: Callable[[], Iterator[str]] = _no_dump
+    panels: Callable[[Iterable[str]], Any] = _no_panels
 
 
 def deps(ctx: click.Context) -> Deps:

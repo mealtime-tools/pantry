@@ -92,16 +92,38 @@ digits belong to some other manufacturer's product.
 
 ## Backfill
 
-`pantry backfill umall` gives those barcodes their panels. It streams the
-whole Open Food Facts CSV export — 1.3 GB, never written to disk — and keeps
-only the rows the catalogue lists, storing them as ordinary `openfoodfacts`
-records. This is the only way to answer tens of thousands of barcodes: the
-public index allows about ten searches a minute, which would take days.
+`pantry backfill umall` gives those barcodes their panels, from one of two
+Open Food Facts exports. Either way it is a bulk read rather than a lookup
+loop: the public index allows about ten searches a minute, so asking for
+seventeen thousand barcodes one at a time would take days.
+
+`--from parquet`, the default, downloads the whole database once — about
+7.8 GB — into `$XDG_CACHE_HOME/pantry/open-food-facts` and queries it with
+DuckDB. It is the better source for two reasons beyond size. Names are kept
+per language, so a product sold here under only a Japanese name still stores;
+the CSV leaves `product_name` empty for those and the record is lost. And the
+ingredient analysis arrives as a list of tags rather than one joined string,
+so matching `en:vegan` cannot accidentally match `en:vegan-status-unknown`.
+
+The file is not queried where it sits. Hugging Face rate-limits the hundreds
+of small range requests a remote parquet read makes and refuses the read
+partway through, so it is fetched in one sequential download and kept. A
+second backfill, or any other question, then costs nothing. Delete the file
+to reclaim the space; it is a cache.
+
+`--from csv` streams the 1.3 GB English export instead, writing nothing to
+disk. Use it when the space matters more than the coverage.
 
 Coverage is thin, and the report says so rather than hiding it. Measured
-against the live food catalogue: 17,973 joinable barcodes, of which 1,772 hold
-a usable panel — about one in ten. A joined result is the exception, not the
-rule.
+against the live food catalogue: 17,973 joinable barcodes, of which 3,518 hold
+a usable panel — about one in five.
+
+Most of that came from choosing the parquet over the CSV, and not in the way
+expected. The two agree closely on which barcodes exist — 4,304 against 4,043
+— but the CSV reports no nutrition at all for 2,255 of its matches where the
+parquet has a panel for most of them. Its flattened `*_100g` columns are far
+sparser than the nutriments the database actually holds, so `--from csv`
+stores 1,735 panels where `--from parquet` stores 3,443.
 
 The gaps are not random. Coverage tracks where the barcode was issued, because
 Open Food Facts is thinnest on the Asian market this shop sells: Thailand 29%,

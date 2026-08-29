@@ -17,6 +17,8 @@ from pantry.commands.refresh import refresh
 from pantry.commands.search import search
 from pantry.diet import diet_path, read_diets
 from pantry.off_dump import stream
+from pantry.off_parquet import download
+from pantry.off_parquet import harvest as parquet_harvest
 from pantry.open_food_facts import OpenFoodFacts, cache_dir
 from pantry.providers import Providers
 from pantry.providers.local import LocalProvider
@@ -109,6 +111,9 @@ def main(ctx: click.Context, json_output: bool) -> None:
         catalog_dir=catalogs,
         sweep=lambda: Storefront().sweep(),
         dump=stream,
+        panels=lambda wanted: parquet_harvest(
+            wanted, download(cache_dir() / "food.parquet")
+        ),
     )
 
 

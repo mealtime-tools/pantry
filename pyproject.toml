@@ -21,9 +21,14 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
-dependencies = ["click-agentcli>=0.4.1",
+dependencies = [
+    "click-agentcli>=0.4.1",
     "mealtime-nutrients>=0.3.0",
-    "python-dotenv>=1.0", "click>=8.1", "rapidfuzz>=3.9"]
+    "python-dotenv>=1.0",
+    "click>=8.1",
+    "rapidfuzz>=3.9",
+    "duckdb>=1.5.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/mealtime-tools/pantry"

@@ -7,11 +7,16 @@ from agentcli import json_option
 
 from pantry.catalog import catalog_path, read_catalog
 from pantry.diet import diet_path, read_diets, write_diets
-from pantry.off_dump import harvest
+from pantry.off_dump import harvest as harvest_csv
 from pantry.output import emit
 from pantry.session import deps, guard, wants_json
 
 RETAILERS = ("umall",)
+
+# Where the panels come from. The parquet is the whole database and keeps
+# names in every language; the CSV is the English view, a sixth of the size,
+# and served by a host that does not rate-limit a long read.
+SOURCES = ("parquet", "csv")
 
 
 def _human(payload: dict[str, Any]) -> list[str]:
@@ -27,9 +32,19 @@ def _human(payload: dict[str, Any]) -> list[str]:
 @click.argument(
     "retailer", type=click.Choice(RETAILERS), default="umall", required=False
 )
+@click.option(
+    "--from",
+    "source",
+    type=click.Choice(SOURCES),
+    default="parquet",
+    show_default=True,
+    help="Which Open Food Facts export to read.",
+)
 @json_option
 @click.pass_context
-def backfill(ctx: click.Context, retailer: str, json_output: bool) -> None:
+def backfill(
+    ctx: click.Context, retailer: str, source: str, json_output: bool
+) -> None:
     """Store Open Food Facts panels for the barcodes RETAILER sells.
 
     Reads the whole Open Food Facts export in one streaming pass, keeping only
@@ -54,7 +69,11 @@ def backfill(ctx: click.Context, retailer: str, json_output: bool) -> None:
             if entry.get("ref")
         }
 
-        reaped = harvest(state.dump(), wanted)
+        reaped = (
+            state.panels(wanted)
+            if source == "parquet"
+            else harvest_csv(state.dump(), wanted)
+        )
         stored = state.store.add_all(reaped.records)
 
         # Merged, not replaced: a second retailer's backfill must not drop
@@ -66,6 +85,7 @@ def backfill(ctx: click.Context, retailer: str, json_output: bool) -> None:
         emit(
             {
                 "retailer": retailer,
+                "source": source,
                 "wanted": len(wanted),
                 "stored": stored,
                 "diets": len(reaped.diets),

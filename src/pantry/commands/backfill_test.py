@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from pantry.catalog import catalog_path, write_catalog
 from pantry.cli import main
 from pantry.diet import diet_path, read_diets
+from pantry.off_dump import Harvest
 from pantry.providers import Providers
 from pantry.session import Deps
 from pantry.store import Store, write_atomic
@@ -66,7 +67,9 @@ def run(
         catalog_dir=tmp_path,
         dump=lambda: iter(lines),
     )
-    result = CliRunner().invoke(main, ["backfill", "--json"], obj=state)
+    result = CliRunner().invoke(
+        main, ["backfill", "--from", "csv", "--json"], obj=state
+    )
     assert result.exit_code == 0, result.output
     return json.loads(result.output)["data"], store
 
@@ -140,6 +143,28 @@ def test_a_second_backfill_keeps_what_the_first_learned(
     }
 
 
+def test_the_parquet_is_the_default_source(tmp_path: Path) -> None:
+    """The CSV is the English view; the whole database is the better answer."""
+    write_catalog(
+        catalog_path(tmp_path, "umall"), [JOINABLE], "2026-08-29T09:00:00Z"
+    )
+    asked: list[set] = []
+    store = Store(lambda: [], tmp_path)
+    state = Deps(
+        store=store,
+        providers=Providers([]),
+        write_out=lambda path, text: write_atomic(Path(path), text),
+        catalog_dir=tmp_path,
+        panels=lambda wanted: asked.append(set(wanted)) or Harvest([], {}, 0),
+    )
+
+    result = CliRunner().invoke(main, ["backfill", "--json"], obj=state)
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["source"] == "parquet"
+    assert asked == [{"8850643003416"}]
+
+
 def test_a_run_with_no_export_refuses_rather_than_guessing(
     tmp_path: Path,
 ) -> None:
@@ -153,7 +178,9 @@ def test_a_run_with_no_export_refuses_rather_than_guessing(
         catalog_dir=tmp_path,
     )
 
-    result = CliRunner().invoke(main, ["backfill", "--json"], obj=state)
+    result = CliRunner().invoke(
+        main, ["backfill", "--from", "csv", "--json"], obj=state
+    )
 
     assert result.exit_code == 1
     assert "no product export" in result.output
@@ -168,7 +195,9 @@ def test_a_backfill_needs_a_catalogue_first(tmp_path: Path) -> None:
         dump=lambda: iter(export(ROW)),
     )
 
-    result = CliRunner().invoke(main, ["backfill", "--json"], obj=state)
+    result = CliRunner().invoke(
+        main, ["backfill", "--from", "csv", "--json"], obj=state
+    )
 
     assert result.exit_code == 1
     assert "pantry refresh" in result.output

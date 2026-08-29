@@ -36,14 +36,16 @@ describe. Umall states no nutrition, so a row's panel is empty until
 run, the provider is absent from `sources` rather than an error.
 
 `pantry backfill umall --json` stores Open Food Facts panels for the barcodes
-that catalogue lists, by streaming the 1.3 GB export in one pass. Run it after
-a refresh; it is the only way to answer tens of thousands of barcodes, since
-the public index allows about ten searches a minute. Its report separates
+that catalogue lists. Run it after a refresh; it is the only way to answer
+tens of thousands of barcodes, since the public index allows about ten
+searches a minute. By default it downloads the whole 7.8 GB parquet database
+once into the cache directory and queries it locally; `--from csv` streams the
+1.3 GB English export instead, storing nothing but finding less. Its report separates
 barcodes absent from the export from ones present with no usable panel, and
 neither is ever filled in with a guess. Coverage is thin and uneven: about one
-joinable barcode in ten stores a panel, and the rate follows where the barcode
-was issued — Thailand 29%, Korea 16%, Japan 8%, China 6%, fresh produce nearly
-none. Treat a panel as a bonus, not the normal case.
+joinable barcode in five stores a panel from the parquet, half that from the
+CSV, and the rate follows where the barcode was issued — fresh produce has
+nearly none. Treat a panel as a bonus, not the normal case.
 
 The same pass writes what the export concluded about each ingredient list.
 `pantry search --vegetarian` keeps only results it judged vegetarian or vegan;
