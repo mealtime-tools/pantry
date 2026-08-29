@@ -178,7 +178,28 @@ class Storefront:
             since = boundary
 
 
-def _panel(store: Store, entry: dict[str, Any]) -> dict[str, Any]:
+def _held_panels(store: Store) -> dict[str, dict[str, Any]]:
+    """Every stored Open Food Facts panel, by barcode, read once.
+
+    `Store.find` re-reads the shards from disk on purpose: it guards a page
+    load, and a cache there could cost the user one. In a loop that intent
+    inverts — a search narrowing over five hundred candidates would read the
+    whole store five hundred times — so the read happens once per search here.
+    """
+    return {
+        str(product["id"]): {
+            key: product[key]
+            for key in NUTRIENT_KEYS
+            if product.get(key) is not None
+        }
+        for product in store.all()
+        if product.get("source") == "openfoodfacts"
+    }
+
+
+def _panel(
+    panels: dict[str, dict[str, Any]], entry: dict[str, Any]
+) -> dict[str, Any]:
     """The nutrition already held for this barcode, if any is.
 
     Only an external barcode is looked up. An in-store code would collide with
@@ -189,13 +210,7 @@ def _panel(store: Store, entry: dict[str, Any]) -> dict[str, Any]:
     if not reference:
         return {}
 
-    held = store.find("openfoodfacts", reference.removeprefix("off:"))
-    if held is None:
-        return {}
-
-    return {
-        key: held[key] for key in NUTRIENT_KEYS if held.get(key) is not None
-    }
+    return panels.get(reference.removeprefix("off:"), {})
 
 
 def _priced(
@@ -281,12 +296,15 @@ class UmallProvider(Provider):
         entries = document["products"]
         fetched_at = document["fetched_at"]
 
+        matched = Local(entries).ranked(query, limit)
+        panels = _held_panels(self._store) if matched else {}
+
         return [
             _priced(
                 entry,
-                _panel(self._store, entry),
+                _panel(panels, entry),
                 fetched_at,
                 self._diets.get(str(entry["id"])),
             )
-            for entry in Local(entries).ranked(query, limit)
+            for entry in matched
         ]
