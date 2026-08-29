@@ -85,6 +85,39 @@ About seven barcodes in ten identify the product outside the store; the rest
 are codes the shop issued to itself and are never looked up, because those
 digits belong to some other manufacturer's product.
 
+## Backfill
+
+`pantry backfill umall` gives those barcodes their panels. It streams the
+whole Open Food Facts CSV export — 1.3 GB, never written to disk — and keeps
+only the rows the catalogue lists, storing them as ordinary `openfoodfacts`
+records. This is the only way to answer tens of thousands of barcodes: the
+public index allows about ten searches a minute, which would take days.
+
+Coverage is thin, and the report says so rather than hiding it. Measured
+against the live catalogue: 25,637 barcodes asked about, 4,120 present in the
+export, 1,737 with a usable panel, and 250 with a definite vegetarian verdict.
+That is roughly one panel per fifteen barcodes, so a joined result is the
+exception rather than the rule. It distinguishes the two ways a barcode can fail — absent from
+the export, or present with no usable panel — because the export is
+community-maintained and carries rows stating things like 6380 kcal per 100 g.
+Those are dropped, never stored, and never allowed to end the download.
+
+The same pass records what the export concluded from each ingredient list,
+into `openfoodfacts.diet.json` beside the records. That is neither a nutrient
+nor a retailer's fact, so it is neither in a record nor in a catalogue: the
+same barcode means the same thing whoever sells it. `--vegetarian` filters on
+it, and passes only a row the export judged — unknown is never a pass.
+
+```sh
+pantry refresh umall
+pantry backfill umall
+pantry --json search tofu --source umall --vegetarian --sort protein-per-kcal
+```
+
+`--sort` takes `protein-per-kcal`, `price-per-100g` or `price-per-g-protein`.
+A result missing the figure a key needs sorts last rather than as a zero:
+nothing known is not the same as none of it.
+
 ## Development
 
 ```sh

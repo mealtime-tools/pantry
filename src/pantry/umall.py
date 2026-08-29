@@ -10,6 +10,7 @@ Nothing here performs I/O: a payload arrives as parsed JSON and leaves as a
 row, so every test runs offline.
 """
 
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -78,6 +79,50 @@ def _decimal(value: Any) -> Decimal | None:
     return parsed
 
 
+# What a title says the pack holds: a size, optionally times a count. The
+# count is written three ways — "3 x 200ml", "122g x 4", and in words as
+# "500ml - 24 Bottles/Case" — and all three appear in the catalogue.
+_PACKS = r"bottles?|packs?|pieces?|pcs?|bags?|cans?|tins?|boxes|sachets?"
+_SIZE = re.compile(
+    r"(?:(?P<before>\d+)\s*[x×]\s*)?"
+    r"(?P<amount>\d+(?:\.\d+)?)\s*(?P<unit>kg|g|ml|l)\b"
+    r"(?:\s*[x×]\s*(?P<after>\d+)"
+    rf"|\s*[-,/]?\s*(?P<named>\d+)\s*(?:{_PACKS})\b)?",
+    re.IGNORECASE,
+)
+
+# Millilitres are read as grams, exactly as a per-100 mL panel is. Both are
+# exact for water and close enough for the sauces this mostly concerns.
+_UNIT_GRAMS = {
+    "g": Decimal(1),
+    "kg": Decimal(1000),
+    "ml": Decimal(1),
+    "l": Decimal(1000),
+}
+
+
+def net_grams(title: str) -> Decimal | None:
+    """What the title says is in the pack, in grams.
+
+    Preferred over the storefront's own weight, which is what the pack weighs
+    in a courier's hands. For a cup noodle those differ by the cup: 78 g of
+    food in a 226 g parcel, and pricing the parcel makes packaging look like
+    food. The title is the only place the net content is stated.
+
+    The last size in the title wins, because a name that mentions two states
+    the pack size second: "Mini Bowl 41g, 12 Pack, 492g".
+    """
+    matches = list(_SIZE.finditer(title))
+    if not matches:
+        return None
+
+    found = matches[-1]
+    amount = Decimal(found["amount"]) * _UNIT_GRAMS[found["unit"].lower()]
+    count = found["before"] or found["after"] or found["named"]
+
+    return (amount * int(count) if count else amount).normalize()
+
+
 def _grams(variant: dict[str, Any]) -> Decimal | None:
     """The pack weight in grams, where the store stated one it can state.
 
@@ -123,7 +168,10 @@ def catalog_entry(node: dict[str, Any]) -> dict[str, Any] | None:
         ),
     }
 
-    grams = _grams(variant)
+    # The title states net content; the storefront states shipping weight.
+    # The first is what a unit price should divide by, so it wins where the
+    # title states one at all.
+    grams = net_grams(name) or _grams(variant)
     if grams is not None:
         # Not `grams`: that key names the weight a panel describes, and
         # `rescale` overwrites it. A pack weight under it would be relabelled

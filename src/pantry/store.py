@@ -93,6 +93,33 @@ class Store:
         assert_exportable_product(product)
         self._write(product)
 
+    def add_all(self, products: list[Product]) -> int:
+        """Store many records at once, rewriting each shard exactly once.
+
+        `add` is the wrong shape for a backfill: a shard is rewritten whole,
+        so storing several thousand one at a time would rewrite a growing file
+        several thousand times. Every record is validated before anything is
+        written, so a bad one in the middle does not leave a half-stored shard.
+        """
+        for product in products:
+            assert_exportable_product(product)
+
+        by_source: dict[str, dict[tuple[str, str], Product]] = {}
+        for product in products:
+            source = product["source"]
+            by_source.setdefault(source, {})[identity(product)] = product
+
+        for source, incoming in by_source.items():
+            shard = self._store / f"{source}.jsonl"
+            held = read_shard(shard, source)
+            kept = [p for p in held if identity(p) not in incoming]
+            write_atomic(
+                shard,
+                format_jsonl([*kept, *incoming.values()], source=source),
+            )
+
+        return sum(len(incoming) for incoming in by_source.values())
+
     def _write(self, product: Product) -> None:
         """Land a record in the shard named for its source.
 

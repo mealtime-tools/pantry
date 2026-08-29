@@ -199,7 +199,10 @@ def _panel(store: Store, entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _priced(
-    entry: dict[str, Any], panel: dict[str, Any], fetched_at: str
+    entry: dict[str, Any],
+    panel: dict[str, Any],
+    fetched_at: str,
+    diet: str | None = None,
 ) -> dict[str, Any]:
     """One catalogue row as a search result: what it is, and what it costs.
 
@@ -232,6 +235,9 @@ def _priced(
         # Stamped per row: a price is only true as of the sweep that read it.
         "price_at": fetched_at,
         "available": entry.get("available"),
+        # What the export concluded from the ingredients, where it could tell.
+        # Absent means unknown, which a filter must not read as either answer.
+        "diet": diet,
         "url": entry.get("url"),
     }
 
@@ -253,9 +259,12 @@ class UmallProvider(Provider):
     # Reads a file, so it costs nothing and answers without `--remote`.
     remote = False
 
-    def __init__(self, store: Store, path: Path) -> None:
+    def __init__(
+        self, store: Store, path: Path, diets: dict[str, str] | None = None
+    ) -> None:
         self._store = store
         self._path = path
+        self._diets = diets or {}
 
     @property
     def enabled(self) -> bool:
@@ -273,6 +282,11 @@ class UmallProvider(Provider):
         fetched_at = document["fetched_at"]
 
         return [
-            _priced(entry, _panel(self._store, entry), fetched_at)
+            _priced(
+                entry,
+                _panel(self._store, entry),
+                fetched_at,
+                self._diets.get(str(entry["id"])),
+            )
             for entry in Local(entries).ranked(query, limit)
         ]

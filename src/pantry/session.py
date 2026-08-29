@@ -45,6 +45,12 @@ def _no_sweep() -> Iterator[dict]:
     yield  # pragma: no cover - unreachable, and what makes this a generator
 
 
+def _no_dump() -> Iterator[str]:
+    """A run that was never given an export to read."""
+    raise UsageError("this run has no product export configured to read")
+    yield  # pragma: no cover - unreachable, and what makes this a generator
+
+
 @dataclass
 class Deps:
     """The effects the CLI has."""
@@ -62,6 +68,9 @@ class Deps:
     # are injected so the command is testable with neither.
     sweep: Callable[[], Iterator[dict]] = _no_sweep
     now: Callable[[], str] = _utc_now
+
+    # The other network act: the product export a backfill reads, as lines.
+    dump: Callable[[], Iterator[str]] = _no_dump
 
 
 def deps(ctx: click.Context) -> Deps:

@@ -7,6 +7,7 @@ import pytest
 from pantry.umall import (
     catalog_entry,
     is_external_gtin,
+    net_grams,
     price_per_100_grams,
     price_per_100_kcal,
     price_per_gram,
@@ -95,9 +96,26 @@ class TestCatalogEntry:
         assert entry["id"] == "9202402231777"
         assert "ref" not in entry
 
-    def test_a_kilogram_weight_becomes_grams(self) -> None:
+    def test_the_title_beats_the_shipping_weight(self) -> None:
+        """78 g of noodles in a 226 g parcel: the parcel is not the food."""
         entry = catalog_entry(
-            node(variant={"weight": 1.25, "weightUnit": "KILOGRAMS"})
+            node(
+                title="Nissin Cup Noodles - 78g",
+                variant={"weight": 226.0, "weightUnit": "GRAMS"},
+            )
+        )
+
+        assert entry is not None
+        assert entry["pack_grams"] == Decimal("78")
+
+    def test_the_shipping_weight_is_used_where_no_title_states_one(
+        self,
+    ) -> None:
+        entry = catalog_entry(
+            node(
+                title="Frozen Kurobuta Pork Hind Hock",
+                variant={"weight": 1.25, "weightUnit": "KILOGRAMS"},
+            )
         )
 
         assert entry is not None
@@ -106,14 +124,18 @@ class TestCatalogEntry:
     @pytest.mark.parametrize("unit", ["POUNDS", "OUNCES"])
     def test_an_imperial_weight_is_left_absent(self, unit: str) -> None:
         """Converting would invent a precision the store never stated."""
-        entry = catalog_entry(node(variant={"weightUnit": unit}))
+        entry = catalog_entry(
+            node(title="Mystery Item", variant={"weightUnit": unit})
+        )
 
         assert entry is not None
         assert "pack_grams" not in entry
 
     def test_an_unweighed_product_omits_grams(self) -> None:
         """Fresh produce sold by the piece: zero is not a weight."""
-        entry = catalog_entry(node(variant={"weight": 0.0}))
+        entry = catalog_entry(
+            node(title="Papaya - 1 Piece", variant={"weight": 0.0})
+        )
 
         assert entry is not None
         assert "pack_grams" not in entry
@@ -136,6 +158,46 @@ class TestCatalogEntry:
 
         assert entry is not None
         assert entry["brand"] == ""
+
+
+class TestNetGrams:
+    """What the title says is in the pack, which is not what it ships at."""
+
+    def test_a_plain_size(self) -> None:
+        assert net_grams("Max Bean Silken Tofu 300g") == Decimal("300")
+
+    def test_kilograms_and_litres_become_grams(self) -> None:
+        assert net_grams("Frozen Dumplings 1.25kg") == Decimal("1250")
+        assert net_grams("Soy Sauce 1.9L") == Decimal("1900")
+
+    def test_millilitres_are_read_as_grams(self) -> None:
+        """As a per-100 mL panel is: exact for water, close for sauces."""
+        assert net_grams("Haitian Light Soy Sauce 500ml") == Decimal("500")
+
+    def test_a_multipack_multiplies(self) -> None:
+        assert net_grams("Wang Stir-Fried Ramen 122g x 4") == Decimal("488")
+
+    def test_a_count_before_the_size_multiplies_too(self) -> None:
+        assert net_grams("Yakult 3 x 200ml") == Decimal("600")
+
+    def test_a_count_written_in_words_multiplies(self) -> None:
+        """A case of water is not one bottle, whatever the title's grammar."""
+        assert net_grams(
+            "Evian Natural Mineral Water 500ml - 24 Bottles/Case"
+        ) == Decimal("12000")
+
+    def test_the_last_size_wins(self) -> None:
+        """A title naming both the unit and the pack states the pack last."""
+        assert net_grams("Mini Bowl 41g, 12 Pack, 492g") == Decimal("492")
+
+    def test_a_word_that_is_not_a_pack_does_not_multiply(self) -> None:
+        assert net_grams("Tofu 300g, Serves 4") == Decimal("300")
+
+    def test_a_title_with_no_size_states_nothing(self) -> None:
+        assert net_grams("Papaya - 1 Piece") is None
+
+    def test_a_bare_number_is_not_a_size(self) -> None:
+        assert net_grams("Pocky Strawberry 2026 Edition") is None
 
 
 class TestUnitPrice:

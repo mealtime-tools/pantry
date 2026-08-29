@@ -32,6 +32,23 @@ describe. Umall states no nutrition, so a row's panel is empty until
 `ref` when the barcode is one another database could know. Until a refresh has
 run, the provider is absent from `sources` rather than an error.
 
+`pantry backfill umall --json` stores Open Food Facts panels for the barcodes
+that catalogue lists, by streaming the 1.3 GB export in one pass. Run it after
+a refresh; it is the only way to answer tens of thousands of barcodes, since
+the public index allows about ten searches a minute. Its report separates
+barcodes absent from the export from ones present with no usable panel, and
+neither is ever filled in with a guess. Coverage is thin: of 25,637 barcodes
+asked about, 4,120 were in the export and 1,737 stored a usable panel — about
+one in fifteen. Treat a panel as a bonus, not the normal case.
+
+The same pass writes what the export concluded about each ingredient list.
+`pantry search --vegetarian` keeps only results it judged vegetarian or vegan;
+a result whose `diet` is absent is unknown and never passes. That judgement is
+rarer still — 250 of those 25,637 — so this filter answers about a handful of
+products, not the catalogue. Umall's own `type` and `tags` cover far more. `--sort` takes
+`protein-per-kcal`, `price-per-100g` or `price-per-g-protein`, and a result
+lacking the figure a key needs sorts last rather than as a zero.
+
 `pantry delete SOURCE ID --json` removes one record from the user's own
 store. A shipped record cannot be deleted, and neither can one that was never
 held: both exit 1 with `deleted: false`.

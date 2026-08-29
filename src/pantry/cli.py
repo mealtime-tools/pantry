@@ -10,10 +10,13 @@ from pantry import data
 from pantry.browser import BrowserTransport, launch_chrome
 from pantry.catalog import catalog_path
 from pantry.commands.add import add
+from pantry.commands.backfill import backfill
 from pantry.commands.delete import delete
 from pantry.commands.lookup import lookup
 from pantry.commands.refresh import refresh
 from pantry.commands.search import search
+from pantry.diet import diet_path, read_diets
+from pantry.off_dump import stream
 from pantry.open_food_facts import OpenFoodFacts, cache_dir
 from pantry.providers import Providers
 from pantry.providers.local import LocalProvider
@@ -61,7 +64,11 @@ def _providers(store: Store, catalogs: Path) -> Providers:
             OpenFoodFactsProvider(OpenFoodFacts(cache_dir())),
             UsdaProvider(),
             RetailerProvider(_open_transports),
-            UmallProvider(store, catalog_path(catalogs, RETAILER)),
+            UmallProvider(
+                store,
+                catalog_path(catalogs, RETAILER),
+                read_diets(diet_path(catalogs)),
+            ),
         ]
     )
 
@@ -101,6 +108,7 @@ def main(ctx: click.Context, json_output: bool) -> None:
         json_output=json_output,
         catalog_dir=catalogs,
         sweep=lambda: Storefront().sweep(),
+        dump=stream,
     )
 
 
@@ -110,6 +118,7 @@ for command in (
     add,
     delete,
     refresh,
+    backfill,
     skill_group(name="pantry", package="pantry"),
 ):
     main.add_command(command)
