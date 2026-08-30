@@ -29,6 +29,10 @@ SEARCH_URL = "https://www.woolworths.com.au/shop/search/products?searchTerm={}"
 # The request the page makes for its own results.
 SEARCH_API = "/apis/ui/Search/products"
 
+# A stockcode is the whole of a Woolworths address: the slug the site adds
+# after it is decoration, and the page serves without it. Measured 0.18s.
+PRODUCT_URL = "https://www.woolworths.com.au/shop/productdetails/{}"
+
 
 def _decimal(value: Any) -> Decimal | None:
     """A stated figure, or nothing. Never a guess."""
@@ -73,6 +77,7 @@ def _product(row: Any) -> dict[str, Any] | None:
         # The stockcode is the whole of a product address, so the panel this
         # result has no room for is exactly one `pantry add` away.
         "ref": f"{SOURCE}:{stockcode}",
+        "url": PRODUCT_URL.format(stockcode),
     }
 
     if barcode := str(row.get("Barcode") or "").strip():

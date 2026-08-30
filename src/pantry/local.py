@@ -202,6 +202,9 @@ _SYNONYMS = {
     "coriander": "cilantro",
     "rocket": "arugula",
     "chickpea": "garbanzo",
+    # A spelling, not a food. The shelves use both, often on one page.
+    "yoghurt": "yogurt",
+    # A spelling, not a food. The shelves use both, often on one page.
 }
 
 

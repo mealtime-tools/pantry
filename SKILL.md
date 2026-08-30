@@ -1,24 +1,29 @@
 ---
 name: pantry
-description: Search and acquire food-product nutrition from local data, Umall, USDA, Open Food Facts, Coles, and Woolworths.
+description: Search and acquire food-product nutrition from local data, Coles, Woolworths, Umall, USDA, and Open Food Facts.
 ---
 
 # Pantry
 
 Start with `pantry --json search QUERY`. This is local, fast, and makes no
-network request. Each result carries a `match.score` from 0 to 1 and a
+network request. Each store result carries a `match.score` from 0 to 1 and a
 `match.tier`. Below 0.7, treat the answer as weak and try
 `pantry --json search QUERY --source coles|umall|woolworths`.
 
-Live shop results carry current price, availability, pack size and URL, and no
-nutrition panel. When a result has a `ref`, make the panel permanent with
+Live shop results carry current price, availability, pack size and `url`, and
+no nutrition panel. When a result has a `ref`, make the panel permanent with
 `pantry add REF --json` and use the stored result. A live result without one
 has no supported panel path; do not invent one.
 
-Coles and Umall are plain requests, under a second. Woolworths needs
-`pantry[browser]` and opens a visible Chrome window, so reach for it when the
-user wants a shelf price, not to settle a macro question the store can already
-answer. A shop result has no `match`: the shop's own order is the ranking.
+Coles and Umall are plain requests, under a second. Prefer Coles for an
+ordinary supermarket product: Umall stocks a different catalogue and answers
+common queries with unrelated rows. Woolworths needs `pantry[browser]` and
+opens a visible Chrome window, so reach for it when the user wants that shop's
+shelf price, not to settle a macro question the store can already answer.
+
+Coles and Woolworths results have no `match` — the shop's own order is the
+ranking, and it resolves words the store cannot, so present them in the order
+given and do not re-sort them. Umall results do carry a `match`.
 
 Acquire an exact product with one of:
 
@@ -27,7 +32,12 @@ Acquire an exact product with one of:
 - `pantry add usda:<fdcId> --json`
 - `pantry add woolworths:<stockcode> --json`
 
-Do not retry a retailer block or bypass bot protection.
+A search result's `ref` is already in one of these forms; pass it through
+rather than rebuilding it. Coles allows about four or five page loads in a
+burst, and a Coles search spends one of them.
+
+Do not retry a retailer block or bypass bot protection. A refused run is the
+answer; offer `pantry add --input -` instead.
 
 Nutrients describe the result's `grams`, always present and 100 unless
 `--grams N` on `search` or `lookup` asks for another weight. `pack_grams` is
@@ -46,3 +56,6 @@ records cannot be deleted.
 
 Unknown output values are `null`. An explicit zero remains zero. Never infer
 missing nutrients, a cooked weight, a barcode, or a price.
+
+Where a record has a `barcode`, it is the GTIN the source printed and is how
+two sources are joined to the same product. Never derive one from an id.

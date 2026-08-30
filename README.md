@@ -9,21 +9,22 @@ pantry --json search "greek yoghurt"
 pantry --json search tofu --source umall
 pantry --json search "bega high protein cheese" --source coles
 pantry add off:9323536800014
-pantry add coles:https://www.coles.com.au/product/example-1047
+pantry add coles:https://www.coles.com.au/product/bega-cheese-tasty-protein-grated-250g-7699284
+pantry add woolworths:769526
 pantry add usda:2476857
-pantry --json lookup coles 1047
+pantry --json lookup coles 7699284
 pantry delete manual sourdough
 ```
 
 Local search reads the shipped shards and everything previously added. If it
 does not identify the product, `--source` makes a live request to one shop and
 returns current offers with `price`, `currency`, `pack_grams`,
-`price_per_100g`, `available`, and `url`.
+`price_per_100g`, `available`, `url`, and a `ref`.
 
-Neither shop's search carries a nutrition panel, so live results have `null`
-macros and a `ref` naming where the panel is. Adding that ref fetches and
-stores a separate nutrition record; price and availability stay live-result
-fields and are never copied into it.
+No shop's search carries a nutrition panel, so live results have `null` macros
+and a `ref` naming where the panel is. Adding that ref fetches and stores a
+separate nutrition record; price and availability stay live-result fields and
+are never copied into it.
 
 - `--source coles` is a plain request, about 0.5s. The results page is
   server-rendered, so nothing here needs a browser. It spends one of the four
@@ -38,9 +39,15 @@ fields and are never copied into it.
   The result's ref is `woolworths:<stockcode>`, and its `barcode` is the GTIN
   the page prints.
 
-Neither shop's order is rescored. Their relevance engines know their own
-catalogues and their shoppers' words — asked for "shredded cheese" they answer
-with the grated ones — which is why shop results carry no `match` either.
+Coles and Woolworths results keep the shop's own order and carry no `match`.
+Their relevance engines know their catalogues and their shoppers' words —
+asked for "shredded cheese" they answer with the grated ones — and rescoring
+that on shared words dropped right answers and marked others weak.
+
+Umall is the exception, and it is ranked here. Its endpoint is a suggest
+index, not a relevance engine: measured, "shredded cheese" returns one cheese
+followed by taro strips, lychees and scallops. So those results are ranked and
+filtered like the store's, and they do carry a `match`.
 
 ## Records and matching
 
@@ -55,7 +62,7 @@ Energy is `kcal`; every other nutrient is grams. Kilojoules are converted when
 a panel is read, so no stored record has a `kj` field. Unknown nutrients are
 `null`; zero is returned only when the source explicitly reported zero.
 
-A search result carries `match`:
+A ranked result carries `match` — every store result, and every Umall result:
 
 - `score` is 0 to 1 and states how much of the query the name accounted for.
 - `tier` is the source kind: `verified`, `composition`, `crowdsourced`,
@@ -63,7 +70,8 @@ A search result carries `match`:
 
 Below 0.7 the human output marks a result `~weak`. That is the cue to try a
 live shop rather than silently accepting the local answer. A cooked or
-water-diluted panel never outranks a dry record.
+water-diluted panel never outranks a dry record. Regional spellings are one
+food, not two: `shredded`/`grated`, `prawn`/`shrimp`, `yoghurt`/`yogurt`.
 
 `--sort protein-per-kcal` can reorder nutrient-bearing results. A result that
 lacks a required figure sorts last rather than being treated as zero.

@@ -14,6 +14,7 @@ from agentcli import UsageError
 from pantry.ids import normalize_id
 from pantry.products import Product
 from pantry.sites import product_ref
+from pantry.woolworths import PRODUCT_URL as WOOLWORTHS_PRODUCT_URL
 
 # Network sources with a live name search. The local store is the default.
 SEARCH_SOURCES = ("coles", "umall", "woolworths")
@@ -23,10 +24,6 @@ _PREFIXES = {
     "usda": "usda",
     "off": "openfoodfacts",
 }
-
-# A stockcode is the whole of a Woolworths address, so the prefix form and the
-# url form name the same page and are read by the same site reader.
-WOOLWORTHS_PRODUCT_URL = "https://www.woolworths.com.au/shop/productdetails/{}"
 
 REF_FORMS = (
     "coles:<url>, woolworths:<stockcode>, usda:<fdcId>, or off:<barcode>"

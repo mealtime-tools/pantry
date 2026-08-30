@@ -112,3 +112,12 @@ def test_no_lexical_score_is_attached_to_a_shop_result() -> None:
     found = read_search(payload(BEGA), limit=10)
 
     assert "match" not in found[0]
+
+
+def test_a_result_carries_the_address_a_person_would_open() -> None:
+    """The stockcode is the whole address, so no slug has to be rebuilt."""
+    first = read_search(payload(BEGA), limit=1)[0]
+
+    assert first["url"] == (
+        "https://www.woolworths.com.au/shop/productdetails/6026666"
+    )

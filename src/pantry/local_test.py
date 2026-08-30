@@ -479,3 +479,22 @@ class TestSameFoodDifferentWord:
         found = shelf.search("red pepper", limit=1)
 
         assert found[0]["name"] == "Capsicum, red, raw"
+
+
+def test_a_spelling_is_not_a_different_food() -> None:
+    """Measured on a live Umall shelf: `greek yoghurt` scored the right
+    products lower than `greek yogurt` would, because the shelf spells it
+    the other way. Which spelling was typed must not change the answer.
+    """
+    rows = [
+        {"source": "umall", "id": "1", "name": "AMX Greek Yogurt Original"}
+    ]
+
+    either = [
+        Local(rows).scored(q, limit=1)
+        for q in ("greek yoghurt", "greek yogurt")
+    ]
+
+    assert [found[0][1]["score"] for found in either] == [
+        either[1][0][1]["score"]
+    ] * 2
