@@ -434,3 +434,48 @@ class TestBarcodeOnResults:
         found = as_result({"source": "afcd", "id": "F1", "name": "Egg"})
 
         assert "barcode" not in found
+
+
+class TestSameFoodDifferentWord:
+    """A shelf and a shopper do not always spell a thing the same way."""
+
+    def test_shredded_finds_the_grated_pack(self) -> None:
+        """The user asked for shredded; Bega prints grated on the bag.
+
+        Both rows carry every other word, so only the synonym can decide it.
+        """
+        shelf = Local(
+            [
+                product("woolworths", "Bega Tasty Cheese Block"),
+                product("woolworths", "Bega Tasty Cheese Grated"),
+            ]
+        )
+
+        found = shelf.search("bega shredded cheese", limit=1)
+
+        assert found[0]["name"] == "Bega Tasty Cheese Grated"
+
+    def test_the_word_the_pack_uses_still_works(self) -> None:
+        shelf = Local(
+            [
+                product("woolworths", "Bega Tasty Cheese Block"),
+                product("woolworths", "Bega Tasty Cheese Grated"),
+            ]
+        )
+
+        found = shelf.search("bega grated cheese", limit=1)
+
+        assert found[0]["name"] == "Bega Tasty Cheese Grated"
+
+    def test_a_local_name_finds_the_other_spelling(self) -> None:
+        """Capsicum here, pepper elsewhere, and black pepper is neither."""
+        shelf = Local(
+            [
+                product("afcd", "Pepper, black, ground"),
+                product("afcd", "Capsicum, red, raw"),
+            ]
+        )
+
+        found = shelf.search("red pepper", limit=1)
+
+        assert found[0]["name"] == "Capsicum, red, raw"

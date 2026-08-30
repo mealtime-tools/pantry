@@ -178,7 +178,39 @@ def _words(text: str) -> list[str]:
     return [word for word in _SPLIT.split(_fold(text)) if len(word) > 1]
 
 
+# Two names for one food, folded onto one spelling before matching so either
+# finds either row. Almost all of it is where the user lives: a recipe written
+# elsewhere asks for cilantro, arugula and bell pepper, and the shards call
+# them coriander, rocket and capsicum.
+#
+# This is a closed set, not the beginning of a synonym project. Open-ended
+# vocabulary is a shop's job and the shops already do it — Woolworths answers
+# "shredded" with "grated" unaided — so nothing here tries to compete with
+# that. It exists because the store has no relevance engine of its own.
+#
+# `pepper` is the risk in it: `red pepper` means capsicum, and black pepper is
+# a different thing entirely, which the rest of the query is left to settle.
+_SYNONYMS = {
+    "shredded": "grated",
+    "shred": "grated",
+    "minced": "ground",
+    "mince": "ground",
+    "prawn": "shrimp",
+    "capsicum": "pepper",
+    "eggplant": "aubergine",
+    "zucchini": "courgette",
+    "coriander": "cilantro",
+    "rocket": "arugula",
+    "chickpea": "garbanzo",
+}
+
+
 def _stem(word: str) -> str:
+    """A crude singular, then the one spelling a pair is matched under."""
+    return _SYNONYMS.get(_singular(word), _singular(word))
+
+
+def _singular(word: str) -> str:
     """A crude singular: enough to tell "eggs" and "egg" apart from nothing."""
     if word.endswith("ies") and len(word) > 3:
         return f"{word[:-3]}y"
