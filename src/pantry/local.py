@@ -255,6 +255,11 @@ def as_result(product: Product, match: dict | None = None) -> dict:
     if product.get("url") is not None:
         result["url"] = product["url"]
 
+    # The one field two sources can agree on. Carried so a consumer can join
+    # a retailer's row to another database's panel without re-reading a page.
+    if product.get("barcode"):
+        result["barcode"] = product["barcode"]
+
     # Never absent, so a consumer never has to infer the basis.
     result["grams"] = product.get("grams") or BASIS_GRAMS
     result["source"] = product.get("source")

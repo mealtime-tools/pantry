@@ -39,6 +39,11 @@ PRODUCT_KEYS = (
     "id",
     "name",
     "brand",
+    # The GTIN the pack prints, where the source states one. Optional, and
+    # never an identity: a record is keyed by source and id. It is here so a
+    # retailer row can be joined to the panel another database holds for the
+    # same pack, which is the only way two sources agree on one product.
+    "barcode",
     "url",
     "grams",
 )
@@ -167,6 +172,12 @@ def assert_identity(product: Product) -> None:
     for key in ("name", "brand"):
         if not isinstance(product.get(key), str):
             raise ProductError(f"product needs a {key}")
+
+    # Same reason as the id: a barcode read as a number has already lost its
+    # leading zeros, and a GTIN that lost one names a different product.
+    barcode = product.get("barcode")
+    if barcode is not None and not isinstance(barcode, str):
+        raise ProductError("product barcode must be a string")
 
 
 def _check_number(

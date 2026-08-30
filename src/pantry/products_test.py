@@ -6,7 +6,14 @@ import pytest
 
 from pantry.data import data_dir, read_shards
 from pantry.jsonfmt import dumps
-from pantry.products import NUTRIENT_KEYS, parse_jsonl, restate
+from pantry.products import (
+    NUTRIENT_KEYS,
+    ProductError,
+    assert_product_record,
+    parse_jsonl,
+    record_keys,
+    restate,
+)
 
 _LINE = '{"id":"1","name":"Food","brand":"","kcal":391,"fat":0.28,"grams":100}'
 
@@ -70,3 +77,38 @@ def test_restating_divides_last_so_a_whole_figure_stays_whole() -> None:
 
     assert restated["kcal"] == 391
     assert restated["carbs"] == Decimal("55.5")
+
+
+class TestBarcode:
+    """The GTIN a retailer prints, which is what joins it to another source."""
+
+    def test_a_barcode_is_a_key_a_record_may_carry(self) -> None:
+        record = {
+            "source": "woolworths",
+            "id": "6026666",
+            "name": "Bega High Protein Cheese",
+            "brand": "Bega",
+            "barcode": "9310053108556",
+            "grams": 100,
+            "kcal": Decimal("318"),
+        }
+
+        assert_product_record(record)
+
+    def test_a_barcode_is_written_beside_the_identity(self) -> None:
+        assert "barcode" in record_keys({})
+
+    def test_a_barcode_is_refused_rather_than_coerced(self) -> None:
+        """Read as a number it has already lost its leading zeros."""
+        record = {
+            "source": "woolworths",
+            "id": "6026666",
+            "name": "Bega High Protein Cheese",
+            "brand": "Bega",
+            "barcode": 9310053108556,
+            "grams": 100,
+            "kcal": Decimal("318"),
+        }
+
+        with pytest.raises(ProductError, match="barcode"):
+            assert_product_record(record)

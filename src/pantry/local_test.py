@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from pantry.local import Local
+from pantry.local import Local, as_result
 
 
 def product(source: str, name: str, **fields: object) -> dict:
@@ -412,3 +412,25 @@ class TestDilutedPanels:
         top = Local(mixed).search("basmati rice", limit=1)[0]
 
         assert top["name"] == "Basmati Rice"
+
+
+class TestBarcodeOnResults:
+    """The join key is no use if only the store can see it."""
+
+    def test_a_result_carries_the_barcode_its_record_holds(self) -> None:
+        found = as_result(
+            {
+                "source": "woolworths",
+                "id": "6026666",
+                "name": "Bega High Protein Cheese",
+                "barcode": "9310053108556",
+                "kcal": Decimal("318"),
+            }
+        )
+
+        assert found["barcode"] == "9310053108556"
+
+    def test_a_record_without_one_yields_a_result_without_one(self) -> None:
+        found = as_result({"source": "afcd", "id": "F1", "name": "Egg"})
+
+        assert "barcode" not in found

@@ -39,6 +39,11 @@ _WOOLIES_PER_100 = "Quantity Per 100g / 100mL"
 # A Coles liquid's column, and nothing else: a qualifier means it is not one.
 _PER_100_ML = re.compile(r"^\s*(?:per\s*)?100\s*ml\s*$", re.IGNORECASE)
 
+# One column headed for grams and millilitres alike, which states neither.
+_PER_100_BOTH = re.compile(
+    r"^\s*(?:per\s*)?100\s*g\s*/\s*ml\s*$", re.IGNORECASE
+)
+
 
 class SiteError(ValueError):
     """A url or page this package cannot read."""
@@ -80,9 +85,23 @@ def _read_coles(payload: Any) -> dict[str, Any]:
     return {
         "name": str(product.get("name") or ""),
         "brand": str(product.get("brand") or ""),
+        "barcode": str(product.get("gtin") or "") or None,
         "panel": panel_from_rows(rows),
-        "basis_note": MILLILITRE_NOTE if _PER_100_ML.match(title) else None,
+        "basis_note": _coles_basis(title),
     }
+
+
+def _coles_basis(title: str) -> str | None:
+    """What the column heading says the figures are measured against.
+
+    Coles titles this `Per 100g/ml`, one column serving both units, so the
+    page states neither. Confirmed against a live page on 2026-08-30; the
+    older `Per 100mL` heading is still read, since the shards hold rows from
+    when it was written that way.
+    """
+    if _PER_100_BOTH.match(title):
+        return UNSTATED_UNIT_NOTE
+    return MILLILITRE_NOTE if _PER_100_ML.match(title) else None
 
 
 def _woolworths_site_id(path: str) -> str | None:
@@ -109,6 +128,7 @@ def _read_woolworths(payload: Any) -> dict[str, Any]:
     return {
         "name": str(product.get("Name") or ""),
         "brand": str(product.get("Brand") or ""),
+        "barcode": str(product.get("Barcode") or "") or None,
         "panel": panel_from_rows(rows),
         # One column for both units, so the page states neither.
         "basis_note": UNSTATED_UNIT_NOTE,
@@ -167,14 +187,21 @@ def _next_data(html: str) -> Any:
 
 
 def parse_product_page(ref: ProductRef, html: str) -> Product:
-    """Read a fetched page into a record in exactly the JSONL schema.
+    """Read a fetched page into a record in exactly the JSONL schema."""
+    return read_product(ref, _next_data(html))
 
+
+def read_product(ref: ProductRef, payload: Any) -> Product:
+    """Read a page's own payload into a record in the JSONL schema.
+
+    Split from the html so the payload is the unit under test, and so a route
+    that serves the same object without a page around it can be read as is.
     Missing nutrients stay missing; reported values are validated.
     """
     if ref.source not in _SITES:
         raise SiteError(f"no reader for source {ref.source}")
 
-    page = _SITES[ref.source][2](_next_data(html))
+    page = _SITES[ref.source][2](payload)
     if not page["name"]:
         raise SiteError(f"{ref.url}: page carries no product name")
 
@@ -187,6 +214,7 @@ def parse_product_page(ref: ProductRef, html: str) -> Product:
         brand=page["brand"],
         panel=panel,
         url=ref.url,
+        barcode=page.get("barcode"),
         # No `basis`: no retailer page declares one, and absent means it.
         basis_note=page["basis_note"],
     )
@@ -200,6 +228,7 @@ def build_record(
     brand: str,
     panel: dict[str, Figure],
     url: str | None = None,
+    barcode: str | None = None,
     basis: str | None = None,
     basis_note: str | None = None,
 ) -> Product:
@@ -209,6 +238,7 @@ def build_record(
         "basis": basis,
         "basis_note": basis_note,
         "url": url,
+        "barcode": barcode,
     }
 
     record: Product = {
