@@ -10,7 +10,7 @@ from click.testing import CliRunner
 from mealtime_nutrients import CORE_NUTRIENTS
 
 from pantry.cli import main
-from pantry.commands.add import _read_input
+from pantry.commands.add import _preserved, _read_input
 from pantry.data import data_dir, read_shards
 from pantry.local import as_result
 from pantry.nutrition import nutrients_for_storage
@@ -753,3 +753,35 @@ def test_a_fetched_panel_makes_no_such_claim() -> None:
     )
 
     assert "entered" not in fetched
+
+
+def test_a_real_reading_clears_the_keyed_flag() -> None:
+    """A typed record that is later fetched is no longer a typed record.
+
+    `_preserved` keeps the fields a new reading is silent about, which is
+    right for a basis and wrong for this: a provider never says `entered`,
+    so the stale flag would outlive the transcription it described.
+    """
+    typed = {"source": "coles", "id": "1", "name": "X", "entered": True}
+    fetched = build_record(
+        source="coles", product_id="1", name="X", brand="", panel={"kcal": 1}
+    )
+
+    assert "entered" not in _preserved(typed, fetched)
+
+
+def test_a_correction_still_declares_itself() -> None:
+    """The other direction: typing over a fetched record marks it."""
+    fetched = build_record(
+        source="coles", product_id="1", name="X", brand="", panel={"kcal": 1}
+    )
+    typed = build_record(
+        source="coles",
+        product_id="1",
+        name="X",
+        brand="",
+        panel={"kcal": 2},
+        entered=True,
+    )
+
+    assert _preserved(fetched, typed)["entered"] is True

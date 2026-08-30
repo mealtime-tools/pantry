@@ -92,7 +92,12 @@ def _preserved(held: Product | None, product: Product) -> Product:
     """
     if not held:
         return product
-    return {**held, **product}
+
+    # Every field but this one: `entered` describes the reading that is being
+    # replaced, and no provider ever states it, so carrying it over would keep
+    # marking a fetched panel as one somebody typed.
+    kept = {k: v for k, v in held.items() if k != "entered"}
+    return {**kept, **product}
 
 
 def _changed_fields(before: Product, after: Product) -> list[str]:
