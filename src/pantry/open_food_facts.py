@@ -22,6 +22,11 @@ from pantry.jsonfmt import dumps
 from pantry.store import write_atomic
 
 SEARCH_URL = "https://search.openfoodfacts.org/search"
+# Exact lookup by barcode. A separate endpoint because the search index is
+# lossy: measured against it, `code:8852511011448` returns the name with an
+# empty `nutriments`, and `code:9310053108556` returns nothing at all, while
+# this answers both with a full panel. A panel is the only reason to ask.
+PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
 _USER_AGENT = "pantry/0.1 (https://github.com/owahltinez/pantry)"
 _MAX_RESULTS = 100
 _TTL_SECONDS = 24 * 60 * 60
@@ -172,18 +177,51 @@ class OpenFoodFacts:
         if page_size == 0:
             return []
 
-        path = self._path(query, page_size)
+        return self._reusing(query, page_size, self._request)
+
+    def product(self, barcode: str) -> dict | None:
+        """The record this barcode names, or None if the database lacks it."""
+        found = self._reusing(
+            f"product:{barcode}", 1, lambda _q, _n: self._product(barcode)
+        )
+        return found[0] if found else None
+
+    def _reusing(
+        self,
+        key: str,
+        page_size: int,
+        fetch: Callable[[str, int], list[dict]],
+    ) -> list[dict]:
+        """A fresh cached answer if there is one, else fetch and keep it."""
+        path = self._path(key, page_size)
         cached = self._cached(path)
         if cached is not None:
             return cached
 
-        results = self._request(query, page_size)
+        results = fetch(key, page_size)
         # Whole seconds: the one serializer here writes figures, not floats.
         write_atomic(
             path,
             dumps({"cached_at": int(self._now()), "results": results}),
         )
         return results
+
+    def _product(self, barcode: str) -> list[dict]:
+        """Ask the product endpoint for exactly this code."""
+        code = urllib.parse.quote(barcode, safe="")
+        body = self._get(PRODUCT_URL.format(code))
+        try:
+            payload = json.loads(body, parse_float=Decimal)
+        except ValueError as cause:
+            raise RemoteFailure(
+                f"Open Food Facts returned an invalid answer for {barcode}"
+            ) from cause
+
+        if not isinstance(payload, dict) or payload.get("status") != 1:
+            return []
+
+        hit = _parse_hit(payload.get("product"))
+        return [hit] if hit is not None else []
 
     def _request(self, query: str, page_size: int) -> list[dict]:
         # `boost_phrase` ranks a whole name first; `langs` is not geography.

@@ -1,9 +1,15 @@
 """Open Food Facts: discovery over the public Search-a-licious index.
 
-Credential-free, and a successful search is reused for 24 hours from a
+Credential-free, and a successful answer is reused for 24 hours from a
 disposable cache because the index asks callers to stay under ten searches a
-minute. Acquiring a barcode goes through that same cached query rather than a
-second endpoint, so the one rate limit stays in one place.
+minute.
+
+Discovery and acquisition ask different endpoints because they want different
+things. Searching by name is what the index is for. Acquiring wants a panel,
+and the index does not reliably carry one: `code:8852511011448` comes back
+named and empty, and `code:9310053108556` does not come back at all, while the
+product endpoint answers both in full. A record without figures is not worth
+storing, so an acquire asks the endpoint that has them.
 """
 
 from pantry.nutrition import nutrients_for_storage
@@ -11,9 +17,6 @@ from pantry.open_food_facts import OpenFoodFacts, RemoteFailure
 from pantry.products import NUTRIENT_KEYS, Product
 from pantry.providers import AcquireOptions, Provider, Reference
 from pantry.sites import build_record
-
-# Measured: `q=<barcode>` returns nothing, so an acquire asks for the field.
-_CODE_QUERY = "code:{}"
 
 
 class OpenFoodFactsProvider(Provider):
@@ -50,10 +53,9 @@ class OpenFoodFactsProvider(Provider):
 
     def _exact(self, barcode: str) -> dict:
         """The row whose code is this barcode, and no near match instead."""
-        query = _CODE_QUERY.format(barcode)
-        for hit in self._client.search(query, limit=1):
-            if hit.get("id") == barcode:
-                return hit
+        hit = self._client.product(barcode)
+        if hit is not None and hit.get("id") == barcode:
+            return hit
 
         raise RemoteFailure(
             f"Open Food Facts has no product {barcode}; "
