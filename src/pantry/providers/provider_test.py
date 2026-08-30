@@ -45,12 +45,20 @@ def test_an_unavailable_source_yields_no_searcher() -> None:
     assert providers.searchers(source="umall") == []
 
 
-def test_a_woolworths_stockcode_resolves_to_its_provider() -> None:
+def test_a_woolworths_stockcode_resolves_to_its_product_page() -> None:
+    """The stockcode is the whole address; the reader is the retailer's."""
     assert resolve_reference("woolworths:6026666") == Reference(
-        provider="woolworths",
+        provider="retailer",
         source="woolworths",
         id="6026666",
+        url="https://www.woolworths.com.au/shop/productdetails/6026666",
     )
+
+
+def test_a_woolworths_url_and_its_stockcode_name_the_same_thing() -> None:
+    page = "https://www.woolworths.com.au/shop/productdetails/6026666"
+
+    assert resolve_reference(page) == resolve_reference("woolworths:6026666")
 
 
 def test_a_woolworths_stockcode_is_digits_only() -> None:

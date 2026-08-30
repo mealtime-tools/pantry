@@ -22,8 +22,13 @@ SEARCH_SOURCES = ("umall",)
 _PREFIXES = {
     "usda": "usda",
     "off": "openfoodfacts",
-    "woolworths": "woolworths",
 }
+
+# A stockcode is the whole of a Woolworths address, so the prefix form and the
+# url form name the same page and are read by the same site reader.
+WOOLWORTHS_PRODUCT_URL = (
+    "https://www.woolworths.com.au/shop/productdetails/{}"
+)
 
 REF_FORMS = (
     "coles:<url>, woolworths:<stockcode>, usda:<fdcId>, or off:<barcode>"
@@ -119,18 +124,26 @@ def resolve_reference(ref: str) -> Reference:
             raise UsageError(f"{ref!r} is not {REF_FORMS}")
         return Reference("retailer", site.source, site.id, site.url)
 
+    if text.lower().startswith("woolworths:"):
+        stockcode = normalize_id(text[len("woolworths:") :])
+        if not stockcode.isdigit():
+            raise UsageError(
+                "a Woolworths reference is woolworths:<stockcode>, "
+                "digits only"
+            )
+        url = WOOLWORTHS_PRODUCT_URL.format(stockcode)
+        return Reference("retailer", "woolworths", stockcode, url)
+
     prefix, _, value = text.partition(":")
     provider = _PREFIXES.get(prefix.lower())
     identifier = normalize_id(value)
     if not provider or not identifier:
         raise UsageError(f"{ref!r} is not {REF_FORMS}")
 
-    if provider in ("usda", "woolworths") and not identifier.isdigit():
-        label = "USDA" if provider == "usda" else "Woolworths"
-        form = (
-            "usda:<fdcId>" if provider == "usda" else "woolworths:<stockcode>"
+    if provider == "usda" and not identifier.isdigit():
+        raise UsageError(
+            "a USDA reference is usda:<fdcId>, digits only"
         )
-        raise UsageError(f"a {label} reference is {form}, digits only")
 
     # Stored under the provider's name: `manual` would claim the user read it.
     return Reference(provider, provider, identifier)

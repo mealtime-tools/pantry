@@ -20,7 +20,6 @@ from pantry.providers.pages import PlainTransport, TransportSet
 from pantry.providers.retailer import RetailerProvider
 from pantry.providers.umall import UmallProvider
 from pantry.providers.usda import UsdaProvider
-from pantry.providers.woolworths import WoolworthsProvider
 from pantry.session import Deps
 from pantry.store import Store, store_dir, write_atomic
 
@@ -61,7 +60,6 @@ def _providers(store: Store) -> Providers:
             UsdaProvider(),
             RetailerProvider(_open_transports),
             UmallProvider(),
-            WoolworthsProvider(),
         ]
     )
 
