@@ -39,8 +39,13 @@ def test_a_price_with_no_weight_still_shows_the_pack_price() -> None:
 
 def test_a_unit_price_is_rounded_for_the_eye_only() -> None:
     """The payload keeps the places a division produced; the line does not."""
-    line = describe({**PANEL, "price": Decimal("6.49"),
-                     "price_per_100g": Decimal("1.4295")})
+    line = describe(
+        {
+            **PANEL,
+            "price": Decimal("6.49"),
+            "price_per_100g": Decimal("1.4295"),
+        }
+    )
 
     assert "(1.43/100g)" in line
 
