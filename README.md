@@ -8,7 +8,7 @@ written to a product record.
 pantry --json search "greek yoghurt"
 pantry --json search tofu --source umall
 pantry --json search "bega high protein cheese" --source coles
-pantry add off:9323536800014
+pantry add barcode:9323536800014
 pantry add coles:https://www.coles.com.au/product/bega-cheese-tasty-protein-grated-250g-7699284
 pantry add woolworths:769526
 pantry add usda:2476857
@@ -22,16 +22,22 @@ returns current offers with `price`, `currency`, `pack_grams`,
 `price_per_100g`, `available`, `url`, and a `ref`.
 
 No shop's search carries a nutrition panel, so live results have `null` macros
-and a `ref` naming where the panel is. Adding that ref fetches and stores a
-separate nutrition record; price and availability stay live-result fields and
+and a `ref` naming where the panel would be. Adding that ref fetches and stores
+a separate nutrition record; price and availability stay live-result fields and
 are never copied into it.
+
+A `ref` is a lead, not a guarantee. `coles:` and `woolworths:` refs address the
+shop's own page and resolve as reliably as the shop is reachable. A
+`barcode:<barcode>` ref names a code the retailer printed, which Open Food
+Facts may or may not hold: of the ten external GTINs one Umall search produced
+on 2026-08-30, nine were unknown there. `pantry add` says so and stops.
 
 - `--source coles` is a plain request, about 0.5s. The results page is
   server-rendered, so nothing here needs a browser. It spends one of the four
   or five page loads Coles serves in a burst, so one query is one request. The
   result's ref is `coles:<url>`.
 - `--source umall` is a plain request, about 0.6s. Where a product publishes
-  an external barcode the result's ref is `off:<barcode>`.
+  an external barcode the result's ref is `barcode:<barcode>`.
 - `--source woolworths` needs a browser and opens a visible window: the
   results page carries no products, and the request behind it is refused for
   anything that is not a browser, headless included. Install it with
@@ -86,8 +92,12 @@ lacks a required figure sorts last rather than being treated as zero.
 
 - `coles:<product-url>`
 - `woolworths:<stockcode>`
-- `off:<barcode>`
+- `barcode:<barcode>`
 - `usda:<fdcId>`
+
+A GTIN is printed on the pack rather than owned by any one database, so the
+prefix names the code. Open Food Facts is currently the only provider that can
+resolve one. `off:<barcode>` is the older spelling and still works.
 
 Bare Coles and Woolworths product URLs remain accepted. A held record is not
 fetched again unless `--refresh` is explicit. Retailer requests are limited

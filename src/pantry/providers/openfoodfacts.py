@@ -1,13 +1,16 @@
 """Open Food Facts: a barcode resolved to a panel, and nothing else.
 
-Credential-free, and a successful answer is reused for 24 hours from a
-disposable cache.
+Credential-free, and every answer is a fresh request.
 
 Not a search source. Its name search was poor enough to be worse than the
 local store — `almonds` returned `Crunchoco Almond` — so it left `--source`
-and this provider answers only `add off:<barcode>`. That is the one thing it
-does better than anything else here: a retailer says what exists and what it
-costs, and this supplies the figures the retailer withheld.
+and this provider answers only `add barcode:<barcode>`. That is the one thing
+it does better than anything else here: a retailer says what exists and what
+it costs, and this supplies the figures the retailer withheld.
+
+Its coverage is a community's, not a census. Of the ten external GTINs one
+Umall search produced on 2026-08-30, nine were unknown here, so a barcode
+reference is a lead worth one request rather than a panel already in hand.
 """
 
 from pantry.nutrition import nutrients_for_storage

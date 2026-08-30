@@ -107,8 +107,12 @@ def _product_json_url(url: str) -> str | None:
     return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
 
 
-def _off_reference(payload: Any) -> str | None:
-    """The first manufacturer barcode the product JSON publishes."""
+def _barcode_reference(payload: Any) -> str | None:
+    """The first manufacturer barcode the product JSON publishes.
+
+    A lead, not a promise: the code is Umall's, and whether any panel source
+    holds it is only settled when `pantry add` asks.
+    """
     if not isinstance(payload, dict):
         return None
 
@@ -121,7 +125,7 @@ def _off_reference(payload: Any) -> str | None:
             continue
         barcode = str(variant.get("barcode") or "")
         if is_external_gtin(barcode):
-            return f"off:{barcode}"
+            return f"barcode:{barcode}"
 
     return None
 
@@ -131,8 +135,8 @@ def _entry(product: dict[str, Any]) -> dict[str, Any] | None:
 
     Refused rather than repaired: a non-food category has no panel to ever
     acquire, and a row with no name or no price is not an offer. The suggest
-    endpoint publishes no barcode, so there is no `off:` reference to set and
-    no panel path to point at — the row is shown for its price alone.
+    endpoint publishes no barcode, so there is no `barcode:` reference to set
+    and no panel path to point at — the row is shown for its price alone.
     """
     if not is_food(str(product.get("type") or "")):
         return None
@@ -217,7 +221,7 @@ class UmallProvider(Provider):
             return None
 
         try:
-            return _off_reference(json.loads(self._fetch(url)))
+            return _barcode_reference(json.loads(self._fetch(url)))
         except (OSError, ValueError):
             return None
 

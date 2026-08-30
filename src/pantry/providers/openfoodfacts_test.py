@@ -1,4 +1,4 @@
-"""What `add off:<barcode>` stores, and what it refuses to store."""
+"""What `add barcode:<barcode>` stores, and what it refuses to store."""
 
 from decimal import Decimal
 

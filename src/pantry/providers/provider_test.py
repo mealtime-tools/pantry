@@ -4,6 +4,7 @@ import pytest
 from agentcli import UsageError
 
 from pantry.providers import (
+    REF_FORMS,
     SEARCH_SOURCES,
     Provider,
     Providers,
@@ -76,3 +77,28 @@ def test_a_prefixed_coles_url_resolves_to_the_retailer_provider() -> None:
         id="1516814",
         url=url,
     )
+
+
+class TestBarcodeReference:
+    """A GTIN is printed on the pack, so the prefix names the code."""
+
+    def test_a_barcode_resolves_to_the_one_provider_that_reads_gtins(
+        self,
+    ) -> None:
+        assert resolve_reference("barcode:9323536800014") == Reference(
+            provider="openfoodfacts",
+            source="openfoodfacts",
+            id="9323536800014",
+        )
+
+    def test_the_older_off_spelling_still_names_the_same_thing(self) -> None:
+        """Kept working because released tools emit it. Not documented."""
+        assert resolve_reference("off:9323536800014") == resolve_reference(
+            "barcode:9323536800014"
+        )
+
+    def test_the_stated_forms_name_the_code_rather_than_the_database(
+        self,
+    ) -> None:
+        assert "barcode:<barcode>" in REF_FORMS
+        assert "off:" not in REF_FORMS

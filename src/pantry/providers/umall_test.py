@@ -97,7 +97,7 @@ class TestSearch:
         assert results[0]["id"] == "1"
         assert len(results) == 2
 
-    def test_an_external_barcode_becomes_an_off_reference(self) -> None:
+    def test_an_external_barcode_becomes_a_barcode_reference(self) -> None:
         def fetch(url: str) -> str:
             if "suggest.json" in url:
                 return response(product())
@@ -105,7 +105,7 @@ class TestSearch:
 
         [result] = UmallProvider(fetch).search("tofu", 10)
 
-        assert result["ref"] == "off:9323536800014"
+        assert result["ref"] == "barcode:9323536800014"
 
     def test_an_in_store_barcode_is_not_offered_as_a_reference(self) -> None:
         def fetch(url: str) -> str:

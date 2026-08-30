@@ -214,9 +214,9 @@ def add(
     """Acquire the product REF names and store it in the localstore.
 
     REF is `coles:<url>`, `woolworths:<stockcode>`, `usda:<fdcId>` or
-    `off:<barcode>`, and whichever provider claims it is the one asked. With
-    --input the record is read from a file or stdin and REF may still be a
-    retailer URL, which keeps that identity.
+    `barcode:<barcode>`, and whichever provider claims it is the one asked.
+    With --input the record is read from a file or stdin and REF may still be
+    a retailer URL, which keeps that identity.
     """
     state = deps(ctx)
     json_output = wants_json(ctx, json_output)

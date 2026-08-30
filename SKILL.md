@@ -11,9 +11,15 @@ network request. Each store result carries a `match.score` from 0 to 1 and a
 `pantry --json search QUERY --source coles|umall|woolworths`.
 
 Live shop results carry current price, availability, pack size and `url`, and
-no nutrition panel. When a result has a `ref`, make the panel permanent with
-`pantry add REF --json` and use the stored result. A live result without one
-has no supported panel path; do not invent one.
+no nutrition panel. When a result has a `ref`, try to make the panel permanent
+with `pantry add REF --json` and use the stored result. A live result without
+one has no supported panel path; do not invent one.
+
+A `ref` is a lead, not a promise. `coles:` and `woolworths:` refs address the
+shop's own page and resolve whenever the shop does. A `barcode:<barcode>` ref
+names a code the retailer printed, which Open Food Facts often does not hold —
+of ten such refs from one Umall search, nine were unknown there. Expect that,
+report the product as having no panel, and do not type one in to fill the gap.
 
 Coles and Umall are plain requests, under a second. Prefer Coles for an
 ordinary supermarket product: Umall stocks a different catalogue and answers
@@ -28,7 +34,7 @@ given and do not re-sort them. Umall results do carry a `match`.
 Acquire an exact product with one of:
 
 - `pantry add coles:<product-url> --json`
-- `pantry add off:<barcode> --json`
+- `pantry add barcode:<barcode> --json`
 - `pantry add usda:<fdcId> --json`
 - `pantry add woolworths:<stockcode> --json`
 
