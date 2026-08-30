@@ -29,6 +29,12 @@ def _owned_data() -> Path:
 _PACKAGE_DATA = _owned_data()
 
 
+# The shards this package actually publishes. A working checkout holds more -
+# `data/coles.jsonl` is git-ignored and local-only - so anything that must
+# reason about what a user installs reads these rather than the directory.
+SHIPPED_SOURCES = ("afcd",)
+
+
 def data_dir(env: Mapping[str, str] | None = None) -> Path:
     """The directory holding the canonical per-source shards."""
     environ = os.environ if env is None else env

@@ -14,7 +14,7 @@ from decimal import Decimal
 
 import pytest
 
-from pantry.data import data_dir, read_shards
+from pantry.data import SHIPPED_SOURCES, data_dir, read_shard
 from pantry.local import Local
 
 # query, words the name must carry, words that would mean another food,
@@ -24,8 +24,26 @@ FIXTURE = (
     ("brown onion", ("onion",), ("gravy", "soup"), "kcal", 15, 60),
     ("garlic", ("garlic",), ("fried", "bread", "butter"), "kcal", 90, 160),
     ("chicken breast", ("chicken", "breast"), (), "protein", 18, 30),
-    ("basmati rice", ("basmati", "rice"), (), "carbs", 15, 85),
-    ("greek yoghurt", ("greek",), ("flavoured",), "protein", 3, 12),
+    # Shipped data names no variety, so the assertion is the panel this
+    # must reach: an uncooked white rice, not the brown that sorted first.
+    (
+        "basmati rice",
+        ("rice", "white"),
+        ("brown", "wild", "boiled"),
+        "carbs",
+        15,
+        85,
+    ),
+    # No greek yoghurt ships either. What must not happen is a flavoured
+    # one outranking the plain, which is a different food.
+    (
+        "greek yoghurt",
+        ("yoghurt", "natural"),
+        ("flavoured",),
+        "protein",
+        3,
+        12,
+    ),
     ("cheddar cheese", ("cheddar",), ("slices", "dip"), "protein", 18, 30),
     ("baby spinach", ("spinach",), (), "kcal", 5, 45),
     ("cherry tomatoes", ("tomato",), ("sauce", "paste"), "kcal", 10, 45),
@@ -105,8 +123,18 @@ COMMON_WHOLE_FOODS = (
 
 @pytest.fixture(scope="module")
 def shipped() -> Local:
-    """The shards as installed, read once for the whole fixture."""
-    return Local(read_shards(data_dir({})))
+    """Only what a user who installs this package actually gets.
+
+    Reading the whole data directory made this pass on a maintainer's machine
+    for the wrong reason: `data/coles.jsonl` is local-only and git-ignored, and
+    two of these queries were being answered by rows nobody else has.
+    """
+    rows = [
+        row
+        for source in SHIPPED_SOURCES
+        for row in read_shard(data_dir({}) / f"{source}.jsonl", source)
+    ]
+    return Local(rows)
 
 
 @pytest.mark.parametrize("query,wants,rejects,macro,low,high", FIXTURE)

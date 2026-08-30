@@ -93,6 +93,7 @@ _VARIANTS = frozenset(
     pickled preserved sweetened salted cured
     free reduced low skim lite decaffeinated
     white yolk
+    flavoured
     """.split()
 )
 
@@ -204,7 +205,11 @@ _SYNONYMS = {
     "chickpea": "garbanzo",
     # A spelling, not a food. The shelves use both, often on one page.
     "yoghurt": "yogurt",
-    # A spelling, not a food. The shelves use both, often on one page.
+    # A variety, where the composition tables name only the colour. Basmati is
+    # a white rice, so this reaches the right panel instead of settling for
+    # whichever rice sorts first. Only the unambiguous ones belong here:
+    # `arborio` would qualify, `jasmine` also names a tea.
+    "basmati": "white",
 }
 
 

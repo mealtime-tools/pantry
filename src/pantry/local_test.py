@@ -247,9 +247,12 @@ class TestMatchConfidence:
         }
 
     def test_a_query_word_nothing_answered_lowers_the_score(self) -> None:
+        """`basmati` used to stand here and now resolves to this very row,
+        which is the point of the synonym. The rule needs a word the shards
+        genuinely never say."""
         rows = [product("afcd", "Rice, white, uncooked")]
 
-        found = Local(rows).search("basmati rice", limit=1)
+        found = Local(rows).search("organic rice", limit=1)
 
         assert found[0]["match"]["score"] < Decimal("0.6")
 
