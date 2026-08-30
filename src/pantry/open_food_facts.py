@@ -1,4 +1,4 @@
-"""Open Food Facts by barcode, and the disposable cache in front of it.
+"""Open Food Facts by barcode.
 
 One question is asked here — what product is this code — because that is the
 one Open Food Facts answers better than anything else. Its name search was
@@ -6,27 +6,25 @@ removed once `--source` stopped offering it: it ranked `almonds` above
 `Crunchoco Almond` badly enough to be worse than the local store, and code
 nothing calls is code nobody checks.
 
+There was a 24-hour cache in front of this, for the search index's sake. It
+went with the search: `add` checks the store before asking, so it saved almost
+nothing, and it held *parsed* records rather than payloads — which meant a fix
+to this file stayed invisible for a day, and `add --refresh` re-read the cache
+instead of the source. Stateless, like everything else here.
+
 Results are candidates, not records: community-maintained, no proof of current
-retailer availability, and nothing here writes to the durable local store. The
-cache sits under `XDG_CACHE_HOME`, where losing it costs one request.
+retailer availability, and nothing here writes to the durable local store.
 """
 
-import hashlib
 import json
-import os
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from typing import Any
 
 from mealtime_nutrients import kcal_from_kj
-
-from pantry.jsonfmt import dumps
-from pantry.store import write_atomic
 
 # Exact lookup by barcode, and not the search index, which is lossy: measured
 # against it, `code:8852511011448` returns the name with an empty `nutriments`,
@@ -34,21 +32,10 @@ from pantry.store import write_atomic
 # a full panel. A panel is the only reason to ask.
 PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
 _USER_AGENT = "pantry/0.1 (https://github.com/owahltinez/pantry)"
-_TTL_SECONDS = 24 * 60 * 60
 
 
 class RemoteFailure(Exception):
     """Open Food Facts could not answer. Never retried here."""
-
-
-def cache_dir(
-    env: Mapping[str, str] | None = None, home: Path | None = None
-) -> Path:
-    """Disposable search data, kept apart from durable user records."""
-    environ = os.environ if env is None else env
-    cache = environ.get("XDG_CACHE_HOME")
-    base = Path(cache) if cache else (home or Path.home()) / ".cache"
-    return base / "pantry" / "open-food-facts"
 
 
 def _number(value: Any) -> Decimal | None:
@@ -154,59 +141,15 @@ def _default_get(url: str) -> str:
 
 
 class OpenFoodFacts:
-    """A credential-free barcode lookup, with an on-disk TTL cache."""
+    """A credential-free barcode lookup. One request, no state."""
 
-    def __init__(
-        self,
-        directory: Path,
-        get: Callable[[str], str] | None = None,
-        now: Callable[[], float] | None = None,
-        ttl_seconds: int = _TTL_SECONDS,
-    ) -> None:
-        self._directory = directory
+    def __init__(self, get: Callable[[str], str] | None = None) -> None:
         self._get = get or _default_get
-        self._now = now or time.time
-        self._ttl = ttl_seconds
-
-    def _path(self, barcode: str) -> Path:
-        """One stable, filesystem-safe file per barcode."""
-        digest = hashlib.sha256(barcode.encode("utf-8")).hexdigest()
-        return self._directory / f"{digest}.json"
-
-    def _cached(self, path: Path) -> list[dict] | None:
-        try:
-            record = json.loads(
-                path.read_text(encoding="utf-8"), parse_float=Decimal
-            )
-        except (OSError, ValueError):
-            return None
-
-        stamp = record.get("cached_at")
-        results = record.get("results")
-        fresh = isinstance(stamp, int) and not isinstance(stamp, bool)
-        if not fresh or not isinstance(results, list):
-            return None
-        return results if self._now() - stamp <= self._ttl else None
 
     def product(self, barcode: str) -> dict | None:
-        """The record this barcode names, or None if the database lacks it.
-
-        A fresh cached answer is reused; otherwise the endpoint is asked and
-        the answer kept. Only a success is cached: a failure raises before it
-        reaches here, so a refusal never becomes the answer for a day.
-        """
-        path = self._path(barcode)
-        cached = self._cached(path)
-        if cached is None:
-            cached = self._product(barcode)
-            # Whole seconds: the one serializer here writes figures, not
-            # floats.
-            write_atomic(
-                path,
-                dumps({"cached_at": int(self._now()), "results": cached}),
-            )
-
-        return cached[0] if cached else None
+        """The record this barcode names, or None if the database lacks it."""
+        found = self._product(barcode)
+        return found[0] if found else None
 
     def _product(self, barcode: str) -> list[dict]:
         """Ask the product endpoint for exactly this code."""

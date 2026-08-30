@@ -12,7 +12,7 @@ from pantry.commands.add import add
 from pantry.commands.delete import delete
 from pantry.commands.lookup import lookup
 from pantry.commands.search import search
-from pantry.open_food_facts import OpenFoodFacts, cache_dir
+from pantry.open_food_facts import OpenFoodFacts
 from pantry.providers import Providers
 from pantry.providers.coles import ColesProvider
 from pantry.providers.local import LocalProvider
@@ -80,7 +80,7 @@ def _providers(store: Store) -> Providers:
         [
             LocalProvider(store),
             ColesProvider(_load_page),
-            OpenFoodFactsProvider(OpenFoodFacts(cache_dir())),
+            OpenFoodFactsProvider(OpenFoodFacts()),
             UsdaProvider(),
             RetailerProvider(_open_transports),
             UmallProvider(),

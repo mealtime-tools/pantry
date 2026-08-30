@@ -2,7 +2,6 @@
 
 import json
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
@@ -27,20 +26,20 @@ PRODUCT = {
 }
 
 
-def client(tmp_path: Path, body: str, seen: list[str] | None = None):
+def client(body: str, seen: list[str] | None = None):
     def get(url: str) -> str:
         if seen is not None:
             seen.append(url)
         return body
 
-    return OpenFoodFacts(tmp_path, get=get)
+    return OpenFoodFacts(get=get)
 
 
-def test_a_barcode_is_read_from_the_product_endpoint(tmp_path: Path) -> None:
+def test_a_barcode_is_read_from_the_product_endpoint() -> None:
     """The search index answers `code:` with a name and no nutriments."""
     seen: list[str] = []
 
-    reader = client(tmp_path, json.dumps(PRODUCT), seen)
+    reader = client(json.dumps(PRODUCT), seen)
 
     found = reader.product("8852511011448")
 
@@ -51,27 +50,27 @@ def test_a_barcode_is_read_from_the_product_endpoint(tmp_path: Path) -> None:
     ]
 
 
-def test_a_code_the_database_lacks_is_absent_not_invented(
-    tmp_path: Path,
-) -> None:
-    assert client(tmp_path, json.dumps({"status": 0})).product("1") is None
+def test_a_code_the_database_lacks_is_absent_not_invented() -> None:
+    assert client(json.dumps({"status": 0})).product("1") is None
 
 
-def test_a_barcode_is_fetched_once_and_then_reused(tmp_path: Path) -> None:
+def test_every_read_asks_the_source() -> None:
+    """There was a 24-hour cache here, and it held parsed records. That made
+    `add --refresh` re-read the cache instead of the source, and kept a fix
+    to the parser invisible for a day. `add` checks the store first, so it
+    saved almost nothing."""
     seen: list[str] = []
-    reader = client(tmp_path, json.dumps(PRODUCT), seen)
+    reader = client(json.dumps(PRODUCT), seen)
 
     reader.product("8852511011448")
     reader.product("8852511011448")
 
-    assert len(seen) == 1
+    assert len(seen) == 2
 
 
-def test_an_unreadable_answer_is_refused_rather_than_parsed(
-    tmp_path: Path,
-) -> None:
+def test_an_unreadable_answer_is_refused_rather_than_parsed() -> None:
     with pytest.raises(RemoteFailure):
-        client(tmp_path, "not json").product("8852511011448")
+        client("not json").product("8852511011448")
 
 
 # What Open Food Facts holds for Coles Grated Parmesan, 9310645106380: energy
@@ -91,21 +90,15 @@ KILOJOULES_ONLY = {
 }
 
 
-def test_energy_stated_only_in_kilojoules_is_still_energy(
-    tmp_path: Path,
-) -> None:
+def test_energy_stated_only_in_kilojoules_is_still_energy() -> None:
     """Dropping it left a panel with macros and no calories at all."""
-    found = client(tmp_path, json.dumps(KILOJOULES_ONLY)).product(
-        "9310645106380"
-    )
+    found = client(json.dumps(KILOJOULES_ONLY)).product("9310645106380")
 
     assert found is not None
     assert found["kcal"] == Decimal("492.351816")
 
 
-def test_a_stated_calorie_figure_beats_converting_the_kilojoules(
-    tmp_path: Path,
-) -> None:
+def test_a_stated_calorie_figure_beats_converting_the_kilojoules() -> None:
     """Both present: the source's own number, not our arithmetic."""
     both = {"status": 1, "product": {**KILOJOULES_ONLY["product"]}}
     both["product"]["nutriments"] = {
@@ -113,7 +106,7 @@ def test_a_stated_calorie_figure_beats_converting_the_kilojoules(
         "energy-kcal_100g": 490,
     }
 
-    found = client(tmp_path, json.dumps(both)).product("9310645106380")
+    found = client(json.dumps(both)).product("9310645106380")
 
     assert found is not None
     assert found["kcal"] == Decimal("490")
