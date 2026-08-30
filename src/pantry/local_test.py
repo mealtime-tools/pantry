@@ -176,3 +176,17 @@ class TestLeftoverQualifiers:
         best = Local(rows).search("rolled oats", limit=1)
 
         assert best[0]["name"] == "Oats, rolled, uncooked"
+
+
+class TestPlurals:
+    """A plural is the same word, and must not cost a record its place."""
+
+    def test_a_plural_query_matches_the_singular_head_exactly(self) -> None:
+        rows = [
+            product("coles", "Speckled Easter Eggs"),
+            product("afcd", "Egg, chicken, whole, raw"),
+        ]
+
+        best = Local(rows).search("eggs", limit=1)
+
+        assert best[0]["name"] == "Egg, chicken, whole, raw"

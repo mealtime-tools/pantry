@@ -88,6 +88,13 @@ def _words(text: str) -> list[str]:
     return [word for word in _SPLIT.split(_fold(text)) if len(word) > 1]
 
 
+def _stem(word: str) -> str:
+    """A crude singular: enough to tell "eggs" and "egg" apart from nothing."""
+    if word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
 def _matches(words: list[str], token: str) -> bool:
     """Whether any of `words` is the same word as `token`, near enough."""
     return any(fuzz.ratio(word, token) >= _WORD_CUTOFF for word in words)
@@ -179,10 +186,14 @@ class Local:
         )
         scores = {word: int(score) for word, score, _ in matches}
 
-        if len(token) >= _MIN_PREFIX:
-            for word in self._vocabulary:
-                if word.startswith(token):
-                    scores[word] = max(scores.get(word, 0), _PREFIX_SCORE)
+        stem = _stem(token)
+        for word in self._vocabulary:
+            # A plural is the same word, not a near miss: on `fuzz.ratio`
+            # alone "eggs" scored "egg" at 86 and lost to an Easter egg.
+            if _stem(word) == stem:
+                scores[word] = 100
+            elif len(token) >= _MIN_PREFIX and word.startswith(token):
+                scores[word] = max(scores.get(word, 0), _PREFIX_SCORE)
 
         return scores
 
