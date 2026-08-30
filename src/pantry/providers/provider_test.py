@@ -1,6 +1,15 @@
-"""Selection of the one search provider a command asks."""
+"""Provider selection and the public reference forms."""
 
-from pantry.providers import SHOP_NAMES, Provider, Providers
+import pytest
+from agentcli import UsageError
+
+from pantry.providers import (
+    SHOP_NAMES,
+    Provider,
+    Providers,
+    Reference,
+    resolve_reference,
+)
 
 
 class Searcher(Provider):
@@ -34,3 +43,27 @@ def test_an_unavailable_shop_yields_no_searcher() -> None:
     providers = Providers([Searcher("local")])
 
     assert providers.searchers(shop="umall") == []
+
+
+def test_a_woolworths_stockcode_resolves_to_its_provider() -> None:
+    assert resolve_reference("woolworths:6026666") == Reference(
+        provider="woolworths",
+        source="woolworths",
+        id="6026666",
+    )
+
+
+def test_a_woolworths_stockcode_is_digits_only() -> None:
+    with pytest.raises(UsageError, match="digits only"):
+        resolve_reference("woolworths:bread")
+
+
+def test_a_prefixed_coles_url_resolves_to_the_retailer_provider() -> None:
+    url = "https://www.coles.com.au/product/oat-puffs-300g-1516814"
+
+    assert resolve_reference(f"coles:{url}") == Reference(
+        provider="retailer",
+        source="coles",
+        id="1516814",
+        url=url,
+    )

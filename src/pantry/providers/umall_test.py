@@ -97,6 +97,37 @@ class TestSearch:
         assert results[0]["id"] == "1"
         assert len(results) == 2
 
+    def test_an_external_barcode_becomes_an_off_reference(self) -> None:
+        def fetch(url: str) -> str:
+            if "suggest.json" in url:
+                return response(product())
+            return json.dumps({"variants": [{"barcode": "9323536800014"}]})
+
+        [result] = UmallProvider(fetch).search("tofu", 10)
+
+        assert result["ref"] == "off:9323536800014"
+
+    def test_an_in_store_barcode_is_not_offered_as_a_reference(self) -> None:
+        def fetch(url: str) -> str:
+            if "suggest.json" in url:
+                return response(product())
+            return json.dumps({"variants": [{"barcode": "9202402231777"}]})
+
+        [result] = UmallProvider(fetch).search("tofu", 10)
+
+        assert "ref" not in result
+
+    def test_a_failed_barcode_lookup_keeps_the_price_result(self) -> None:
+        def fetch(url: str) -> str:
+            if "suggest.json" in url:
+                return response(product())
+            raise OSError("connection refused")
+
+        [result] = UmallProvider(fetch).search("tofu", 10)
+
+        assert result["price"] == Decimal("2.39")
+        assert "ref" not in result
+
 
 class TestRequest:
     """The suggest request states the query and product-only limit exactly."""

@@ -18,10 +18,16 @@ from pantry.sites import product_ref
 # Shops with a live name search. The local store is the silent default.
 SHOP_NAMES = ("umall",)
 
-# Who claims which prefix. A retailer reference is a url and carries none.
-_PREFIXES = {"usda": "usda", "off": "openfoodfacts"}
+# Who claims which stable identifier prefix.
+_PREFIXES = {
+    "usda": "usda",
+    "off": "openfoodfacts",
+    "woolworths": "woolworths",
+}
 
-REF_FORMS = "a retailer url, usda:<fdcId>, or off:<barcode>"
+REF_FORMS = (
+    "coles:<url>, woolworths:<stockcode>, usda:<fdcId>, or off:<barcode>"
+)
 
 
 @dataclass(frozen=True)
@@ -104,14 +110,27 @@ def resolve_reference(ref: str) -> Reference:
         site = product_ref(text)
         return Reference("retailer", site.source, site.id, site.url)
 
+    # Coles has no stable short id outside its URL, so the prefix labels the
+    # same URL form without trying to reinterpret the address after its colon.
+    if text.lower().startswith("coles:"):
+        url = text[len("coles:") :].strip()
+        site = product_ref(url)
+        if site.source != "coles":
+            raise UsageError(f"{ref!r} is not {REF_FORMS}")
+        return Reference("retailer", site.source, site.id, site.url)
+
     prefix, _, value = text.partition(":")
     provider = _PREFIXES.get(prefix.lower())
     identifier = normalize_id(value)
     if not provider or not identifier:
         raise UsageError(f"{ref!r} is not {REF_FORMS}")
 
-    if provider == "usda" and not identifier.isdigit():
-        raise UsageError("a USDA reference is usda:<fdcId>, digits only")
+    if provider in ("usda", "woolworths") and not identifier.isdigit():
+        label = "USDA" if provider == "usda" else "Woolworths"
+        form = (
+            "usda:<fdcId>" if provider == "usda" else "woolworths:<stockcode>"
+        )
+        raise UsageError(f"a {label} reference is {form}, digits only")
 
     # Stored under the provider's name: `manual` would claim the user read it.
     return Reference(provider, provider, identifier)

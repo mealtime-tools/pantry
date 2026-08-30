@@ -208,10 +208,10 @@ def add(
 ) -> None:
     """Acquire the product REF names and store it in the localstore.
 
-    REF is a retailer url, `usda:<fdcId>` or `off:<barcode>`, and whichever
-    provider claims it is the one asked. With --input the record is read from
-    a file or stdin and REF may still be a retailer url, which keeps that
-    identity: a blocked fetch is a redirection here, not a dead end.
+    REF is `coles:<url>`, `woolworths:<stockcode>`, `usda:<fdcId>` or
+    `off:<barcode>`, and whichever provider claims it is the one asked. With
+    --input the record is read from a file or stdin and REF may still be a
+    retailer URL, which keeps that identity.
     """
     state = deps(ctx)
     json_output = wants_json(ctx, json_output)
@@ -336,7 +336,7 @@ def _manual_record(
     """
     if reference and reference.provider != "retailer":
         raise UsageError(
-            "a manual entry cannot claim a usda or openfoodfacts identity"
+            "a manual entry cannot claim a database or stockcode identity"
         )
 
     identifier = normalize_id(

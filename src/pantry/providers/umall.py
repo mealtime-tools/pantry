@@ -16,7 +16,7 @@ import re
 import urllib.request
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from pantry.local import Local
 from pantry.open_food_facts import RemoteFailure
@@ -24,6 +24,7 @@ from pantry.providers import Provider
 from pantry.umall import (
     STORE_URL,
     _decimal,
+    is_external_gtin,
     is_food,
     net_grams,
     price_per_100_grams,
@@ -92,6 +93,37 @@ def _search_name(title: str) -> str:
     before = title[: size.start()].strip(" ,-×x")
     after = title[size.end() :].strip(" ,-×x")
     return before or after or title
+
+
+def _product_json_url(url: str) -> str | None:
+    """The public product JSON corresponding to one Umall result URL."""
+    parts = urlsplit(url)
+    if parts.netloc != urlsplit(STORE_URL).netloc:
+        return None
+    if not parts.path.startswith("/products/"):
+        return None
+
+    path = parts.path if parts.path.endswith(".js") else f"{parts.path}.js"
+    return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+
+def _off_reference(payload: Any) -> str | None:
+    """The first manufacturer barcode the product JSON publishes."""
+    if not isinstance(payload, dict):
+        return None
+
+    variants = payload.get("variants")
+    if not isinstance(variants, list):
+        return None
+
+    for variant in variants:
+        if not isinstance(variant, dict):
+            continue
+        barcode = str(variant.get("barcode") or "")
+        if is_external_gtin(barcode):
+            return f"off:{barcode}"
+
+    return None
 
 
 def _entry(product: dict[str, Any]) -> dict[str, Any] | None:
@@ -168,7 +200,26 @@ class UmallProvider(Provider):
 
         # Ranked the same way every source is, so one model spans every shop.
         scored = Local(entries).scored(query, limit)
-        return [_result(entry, match) for entry, match in scored]
+        results = []
+        for entry, match in scored:
+            result = _result(entry, match)
+            reference = self._reference(entry["url"])
+            if reference:
+                result["ref"] = reference
+            results.append(result)
+
+        return results
+
+    def _reference(self, product_url: str) -> str | None:
+        """Resolve one optional barcode without sacrificing a price result."""
+        url = _product_json_url(product_url)
+        if url is None:
+            return None
+
+        try:
+            return _off_reference(json.loads(self._fetch(url)))
+        except (OSError, ValueError):
+            return None
 
     def _products(self, query: str, limit: int) -> list[dict]:
         """The suggest endpoint's product list, or the reason there is none."""
