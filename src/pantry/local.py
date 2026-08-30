@@ -81,7 +81,7 @@ _HEAD_MISS = 60
 _VARIANTS = frozenset(
     """
     fried baked boiled grilled roasted toasted poached scrambled casseroled
-    microwaved steamed canned condensed evaporated dried sundried smoked
+    microwaved steamed canned frozen condensed evaporated dried sundried smoked
     pickled preserved sweetened salted cured
     free reduced low skim lite decaffeinated
     """.split()

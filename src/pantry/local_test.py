@@ -265,3 +265,15 @@ class TestVariantTieBreak:
         best = Local(rows).search("cinnamon", limit=1)
 
         assert best[0]["source"] == "afcd"
+
+
+def test_a_frozen_record_ranks_below_the_fresh_one() -> None:
+    """Preservation, like preparation: the plain query wants the plain food."""
+    rows = [
+        product("afcd", "Banana, frozen"),
+        product("afcd", "Banana, cavendish, peeled, raw"),
+    ]
+
+    best = Local(rows).search("banana", limit=1)
+
+    assert best[0]["name"] == "Banana, cavendish, peeled, raw"
