@@ -72,3 +72,48 @@ def test_an_unreadable_answer_is_refused_rather_than_parsed(
 ) -> None:
     with pytest.raises(RemoteFailure):
         client(tmp_path, "not json").product("8852511011448")
+
+
+# What Open Food Facts holds for Coles Grated Parmesan, 9310645106380: energy
+# stated only in kilojoules. Verified live 2026-08-30.
+KILOJOULES_ONLY = {
+    "status": 1,
+    "product": {
+        "code": "9310645106380",
+        "product_name": "Grated Parmesan",
+        "brands": "Coles",
+        "nutriments": {
+            "energy-kj_100g": 2060,
+            "proteins_100g": 33.2,
+            "fat_100g": 39.4,
+        },
+    },
+}
+
+
+def test_energy_stated_only_in_kilojoules_is_still_energy(
+    tmp_path: Path,
+) -> None:
+    """Dropping it left a panel with macros and no calories at all."""
+    found = client(tmp_path, json.dumps(KILOJOULES_ONLY)).product(
+        "9310645106380"
+    )
+
+    assert found is not None
+    assert found["kcal"] == Decimal("492.351816")
+
+
+def test_a_stated_calorie_figure_beats_converting_the_kilojoules(
+    tmp_path: Path,
+) -> None:
+    """Both present: the source's own number, not our arithmetic."""
+    both = {"status": 1, "product": {**KILOJOULES_ONLY["product"]}}
+    both["product"]["nutriments"] = {
+        "energy-kj_100g": 2060,
+        "energy-kcal_100g": 490,
+    }
+
+    found = client(tmp_path, json.dumps(both)).product("9310645106380")
+
+    assert found is not None
+    assert found["kcal"] == Decimal("490")

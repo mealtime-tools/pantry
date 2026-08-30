@@ -23,6 +23,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from mealtime_nutrients import kcal_from_kj
+
 from pantry.jsonfmt import dumps
 from pantry.store import write_atomic
 
@@ -69,11 +71,28 @@ def _number(value: Any) -> Decimal | None:
     return round(parsed, 6)
 
 
+def _energy(source: dict) -> Decimal | None:
+    """Calories per 100 g, converting the kilojoules only if it must.
+
+    A stated calorie figure beats our own arithmetic, which is why it is tried
+    first. But Australian packs print kilojoules, and many rows here carry
+    nothing else: Coles Grated Parmesan, 9310645106380, states 2060 kJ and no
+    kcal at all. Dropping that left a panel with macros and no energy, which
+    is the one figure a recipe cannot do without.
+    """
+    stated = _number(source.get("energy-kcal_100g"))
+    if stated is not None:
+        return stated
+
+    kilojoules = _number(source.get("energy-kj_100g"))
+    return None if kilojoules is None else _number(kcal_from_kj(kilojoules))
+
+
 def _nutrients(values: Any) -> dict[str, Decimal]:
     """Convert an Open Food Facts nutrient map to per-100 g names."""
     source = values if isinstance(values, dict) else {}
     mapped = {
-        "kcal": _number(source.get("energy-kcal_100g")),
+        "kcal": _energy(source),
         "protein": _number(source.get("proteins_100g")),
         "fat": _number(source.get("fat_100g")),
         "carbs": _number(source.get("carbohydrates_100g")),
