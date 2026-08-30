@@ -29,9 +29,13 @@ SOURCE_TRUST = (
     "manual",
     "afcd",
     "usda",
-    "openfoodfacts",
     "coles",
     "woolworths",
+    # Last on purpose. The crowdsourced rows carry the right barcode but often
+    # the wrong food for a plain word: "black beans" found `Sardines in black
+    # beans`, "almonds" found `Crunchoco Almond`. A retailer at least sells
+    # the thing its name says.
+    "openfoodfacts",
 )
 
 # What kind of answer a source gives, coarse enough for a caller to branch on
