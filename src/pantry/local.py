@@ -10,6 +10,7 @@ implementation did, let one accident beat a complete match.
 import re
 import unicodedata
 from collections import defaultdict
+from decimal import Decimal
 
 from mealtime_nutrients import CORE_NUTRIENTS
 from rapidfuzz import fuzz, process
@@ -32,6 +33,17 @@ SOURCE_TRUST = (
     "coles",
     "woolworths",
 )
+
+# What kind of answer a source gives, coarse enough for a caller to branch on
+# without hard-coding the six names.
+SOURCE_TIERS = {
+    "manual": "verified",
+    "afcd": "composition",
+    "usda": "composition",
+    "openfoodfacts": "crowdsourced",
+    "coles": "retail",
+    "woolworths": "retail",
+}
 
 
 def result_with_nulls(result: dict) -> dict:
@@ -75,6 +87,16 @@ _VARIANTS = frozenset(
 # them outweigh naming the food itself.
 _VARIANT_COST = 30
 
+# What a record named exactly for the query scores: one word naming the food
+# and the rest qualifying it. The denominator that turns a score into a
+# confidence, so a caller can tell "the right record" from "the least wrong".
+_PERFECT_HEAD = 150
+_PERFECT_QUALIFIER = 120
+
+# Below this the store answered with something, but not with what was asked
+# for: a query word went unanswered, or the record names a food of its own.
+WEAK_MATCH = Decimal("0.7")
+
 _SPLIT = re.compile(r"[^0-9a-z]+")
 
 
@@ -117,7 +139,18 @@ def split_name(name: str) -> tuple[list[str], list[str]]:
     return segments[0][-1:], segments[0][:-1]
 
 
-def as_result(product: Product) -> dict:
+def confidence(total: float, tokens: int) -> Decimal:
+    """A score as a fraction of a perfect answer to every query word.
+
+    Clamped: the penalties can take a score below zero, and "worse than
+    nothing" is not a thing a caller can act on.
+    """
+    perfect = _PERFECT_HEAD + _PERFECT_QUALIFIER * max(tokens - 1, 0)
+    bounded = max(0.0, min(1.0, total / perfect))
+    return Decimal(bounded).quantize(Decimal("0.01"))
+
+
+def as_result(product: Product, match: dict | None = None) -> dict:
     """The search-result shape agents consume. Absent fields stay absent."""
     name = product.get("name", "")
     brand = product.get("brand", "")
@@ -143,6 +176,11 @@ def as_result(product: Product) -> dict:
     # Never absent, so a consumer never has to infer the basis.
     result["grams"] = product.get("grams") or BASIS_GRAMS
     result["source"] = product.get("source")
+
+    # Not a stored field: how well this answered *this* query, which the
+    # record itself cannot know. Same standing as `title` and `price`.
+    if match is not None:
+        result["match"] = match
 
     return result
 
@@ -199,7 +237,10 @@ class Local:
 
     def search(self, query: str, limit: int = 10) -> list[dict]:
         """Rank products by summed per-word match, best first."""
-        return [as_result(product) for product in self.ranked(query, limit)]
+        return [
+            as_result(product, match)
+            for product, match in self.scored(query, limit)
+        ]
 
     def ranked(self, query: str, limit: int = 10) -> list[Product]:
         """The matching records themselves, best first, in their own shape.
@@ -209,6 +250,12 @@ class Local:
         same matching without a second copy of it. Only `name` and `brand` are
         read here, which both shapes have.
         """
+        return [product for product, _ in self.scored(query, limit)]
+
+    def scored(
+        self, query: str, limit: int = 10
+    ) -> list[tuple[Product, dict]]:
+        """The matching records, each with how well it answered the query."""
         index = self._build()
         tokens = list(dict.fromkeys(_words(query)))
         if not tokens:
@@ -259,7 +306,18 @@ class Local:
         ranked = sorted(
             totals, key=lambda p: self._rank(p, totals[p], leftover[p])
         )
-        return [self._products[p] for p in ranked[:limit]]
+        return [
+            (
+                self._products[p],
+                {
+                    "score": confidence(totals[p], len(tokens)),
+                    "tier": SOURCE_TIERS.get(
+                        self._products[p].get("source"), "unknown"
+                    ),
+                },
+            )
+            for p in ranked[:limit]
+        ]
 
     def _rank(self, position: int, total: float, leftover: int = 0):
         """Score first, then a stable tie-break so output is reproducible.

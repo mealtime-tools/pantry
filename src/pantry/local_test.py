@@ -1,5 +1,9 @@
 """Ranking: which record a plain query resolves to, and why."""
 
+from decimal import Decimal
+
+import pytest
+
 from pantry.local import Local
 
 
@@ -190,3 +194,47 @@ class TestPlurals:
         best = Local(rows).search("eggs", limit=1)
 
         assert best[0]["name"] == "Egg, chicken, whole, raw"
+
+
+class TestMatchConfidence:
+    """How good the answer is, so a caller can decide to look elsewhere."""
+
+    def test_every_result_says_how_well_it_matched(self) -> None:
+        rows = [product("afcd", "Oil, olive")]
+
+        found = Local(rows).search("olive oil", limit=1)
+
+        assert found[0]["match"] == {"score": Decimal("1"),
+                                     "tier": "composition"}
+
+    def test_a_query_word_nothing_answered_lowers_the_score(self) -> None:
+        rows = [product("afcd", "Rice, white, uncooked")]
+
+        found = Local(rows).search("basmati rice", limit=1)
+
+        assert found[0]["match"]["score"] < Decimal("0.6")
+
+    def test_the_tier_names_the_kind_of_source(self) -> None:
+        rows = [product("coles", "Chickpeas")]
+
+        found = Local(rows).search("chickpeas", limit=1)
+
+        assert found[0]["match"]["tier"] == "retail"
+
+    def test_a_confidence_is_never_negative(self) -> None:
+        """Penalties may exceed the score; a match is not worth less than 0."""
+        rows = [product("afcd", "Rice paper wrapper, soaked in water")]
+
+        found = Local(rows).search("rice", limit=1)
+
+        assert found[0]["match"]["score"] >= 0
+
+    def test_a_match_is_not_a_storable_field(self) -> None:
+        """A search-result field, like `title` and `price` before it."""
+        from pantry.products import assert_exportable_product
+
+        with pytest.raises(Exception):
+            assert_exportable_product(
+                {"source": "afcd", "id": "F1", "name": "Oil, olive",
+                 "match": {"score": Decimal("1"), "tier": "composition"}}
+            )

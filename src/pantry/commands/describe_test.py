@@ -58,3 +58,20 @@ def test_an_unknown_macro_stays_a_question_mark_beside_a_price() -> None:
 
     assert "?kcal ?p ?c ?f" in line
     assert "$4.29" in line
+
+
+def test_a_weak_match_is_marked_where_a_person_will_see_it() -> None:
+    """The store answered, but not with what was asked for."""
+    line = describe(
+        {**PANEL, "match": {"score": Decimal("0.4"), "tier": "composition"}}
+    )
+
+    assert line.endswith("~weak")
+
+
+def test_a_good_match_reads_exactly_as_an_unscored_one() -> None:
+    line = describe(
+        {**PANEL, "match": {"score": Decimal("1"), "tier": "composition"}}
+    )
+
+    assert line == describe(PANEL)

@@ -3,6 +3,8 @@
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from pantry.local import WEAK_MATCH
+
 _MACROS = (("kcal", "kcal"), ("protein", "p"), ("carbs", "c"), ("fat", "f"))
 
 
@@ -21,7 +23,21 @@ def describe(product: dict[str, Any]) -> str:
         name = product.get("name", "")
         title = f"{name} ({brand})" if brand else name
 
-    return f"{identity:<20} {macros:<28} {_cost(product)}{title}"
+    body = f"{_cost(product)}{title}{_weak(product)}"
+    return f"{identity:<20} {macros:<28} {body}"
+
+
+def _weak(product: dict[str, Any]) -> str:
+    """Say so when the best answer is not the thing that was asked for.
+
+    An agent reads `match` from `--json`; a person reads a line, and an
+    unmarked line reads as confident whatever the record actually is.
+    """
+    match = product.get("match")
+    if match is None or match.get("score") is None:
+        return ""
+
+    return "  ~weak" if match["score"] < WEAK_MATCH else ""
 
 
 def _cost(product: dict[str, Any]) -> str:
