@@ -1,310 +1,187 @@
-"""Umall: a searchable retail catalogue, and no nutrition of its own.
+"""Umall: a live price search, and no nutrition of its own.
 
-The store publishes no panel anywhere — not in the product description, not
-in a metafield, not on the page. What it does publish is a barcode, and for
-roughly seven rows in ten that barcode identifies the product outside Umall,
-so the panel is whatever `off:<barcode>` already holds. This provider joins
-the two and prices the result; it never invents a figure for a row the join
-missed.
+The store publishes no panel anywhere, and its search endpoint publishes no
+barcode either — only a title, a price and a product URL. So this provider is
+a price finder: it says what Umall sells for a name and what it costs, ranked
+the same way every other source is, and carries no panel and no acquirable
+reference. A row's nutrition, if it is ever wanted, is a separate `add`.
 
-Searching is free because it reads the catalogue on disk. Building that
-catalogue is the network act, and it is a separate command.
+The suggest endpoint is the network act, so this provider is `remote`: a
+search costs one request and answers only under `--shop umall`. The transport
+is injected, so every test here runs offline.
 """
 
 import json
+import re
 import urllib.request
-from collections.abc import Callable, Iterator
-from decimal import Decimal
-from pathlib import Path
+from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlencode
 
-from pantry.catalog import read_catalog
 from pantry.local import Local
 from pantry.open_food_facts import RemoteFailure
-from pantry.products import NUTRIENT_KEYS
 from pantry.providers import Provider
-from pantry.store import Store
 from pantry.umall import (
     STORE_URL,
+    _decimal,
+    is_food,
+    net_grams,
     price_per_100_grams,
-    price_per_100_kcal,
-    price_per_gram,
 )
 
 RETAILER = "umall"
 
-# The theme publishes this to its own front end, so it is a public read
-# credential rather than a secret. It can be rotated by the store at any time,
-# which is a refresh that fails with a clear message, not a wrong answer.
-API_URL = f"{STORE_URL}/api/2025-01/graphql.json"
-STOREFRONT_TOKEN = "4e76a97e8099941b661db168fc662268"
+# The store's public search-as-you-type endpoint. It ranks by relevance and
+# returns at most ten products, whatever limit is asked for.
+SUGGEST_URL = f"{STORE_URL}/search/suggest.json"
+_MAX_SUGGEST = 10
 
-# The most a Storefront connection returns at once.
-_PAGE_SIZE = 250
-
-# Shopify refuses to page past this many items in one connection, and Umall
-# lists more products than that. So a sweep is several connections: page until
-# the cap is near, then start again from the last product's creation time.
-_PAGINATION_CAP = 25000
-_WINDOW = _PAGINATION_CAP - _PAGE_SIZE
-
-# Sorted by creation so a window has a boundary to resume from, and `createdAt`
-# is selected because that boundary is read off the last node. `barcode` is the
-# reason this is GraphQL at all: `/products.json` is simpler and omits it.
-_QUERY = """
-query Catalogue($cursor: String, $size: Int!, $query: String) {
-  products(first: $size, after: $cursor, query: $query,
-           sortKey: CREATED_AT) {
-    pageInfo { hasNextPage endCursor }
-    nodes {
-      handle title vendor productType tags createdAt
-      variants(first: 1) {
-        nodes {
-          sku barcode weight weightUnit availableForSale
-          price { amount currencyCode }
-        }
-      }
-    }
-  }
-}
-"""
-
-# Quoted on purpose: unquoted, Shopify parses the timestamp loosely and
-# returns products created before the bound, so a window would not advance.
-_SINCE = 'created_at:>="{}"'
+# The prices are Australian dollars; the endpoint states no currency code.
+_CURRENCY = "AUD"
 
 _USER_AGENT = "pantry/0.1 (https://github.com/mealtime-tools/pantry)"
 
-Fetch = Callable[[str, bytes, dict[str, str]], bytes]
+# A pack size at either edge is not the food's name. Leaving a trailing size
+# makes it the head word under the retail-name convention used by `Local`.
+_PACK_SIZE = re.compile(
+    r"(?:\d+\s*[x×]\s*)?\d+(?:\.\d+)?\s*(?:kg|g|ml|l)\b",
+    re.IGNORECASE,
+)
+
+# A transport: one URL in, the response body out. Injected so tests run with
+# no network, exactly as the retailer page loader is.
+Fetch = Callable[[str], str]
 
 
-def _post(url: str, body: bytes, headers: dict[str, str]) -> bytes:
-    request = urllib.request.Request(url, body, headers)
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
+def _get(url: str) -> str:
+    request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read().decode("utf-8", "replace")
 
 
-class Storefront:
-    """The whole catalogue, one cursor-paged query at a time."""
+def _url(query: str, limit: int) -> str:
+    """The suggest request for one query, brackets percent-encoded.
 
-    def __init__(self, fetch: Fetch | None = None) -> None:
-        self._fetch = fetch or _post
-
-    def _page(self, cursor: str | None, query: str | None) -> dict[str, Any]:
-        """One page, or the reason there is not one.
-
-        A GraphQL error is reported rather than retried: the two that happen
-        are a rotated token and a removed API version, and neither is fixed by
-        asking again.
-        """
-        body = json.dumps(
-            {
-                "query": _QUERY,
-                "variables": {
-                    "cursor": cursor,
-                    "size": _PAGE_SIZE,
-                    "query": query,
-                },
-            }
-        ).encode()
-        headers = {
-            "Content-Type": "application/json",
-            "X-Shopify-Storefront-Access-Token": STOREFRONT_TOKEN,
-            "User-Agent": _USER_AGENT,
-        }
-
-        try:
-            payload = json.loads(self._fetch(API_URL, body, headers))
-        except OSError as exc:
-            raise RemoteFailure(f"Umall could not be reached: {exc}") from None
-        except ValueError:
-            raise RemoteFailure("Umall returned a response that is not JSON")
-
-        if payload.get("errors"):
-            first = payload["errors"][0].get("message", "unknown error")
-            raise RemoteFailure(f"Umall refused the catalogue query: {first}")
-
-        products = (payload.get("data") or {}).get("products")
-        if not isinstance(products, dict):
-            raise RemoteFailure("Umall returned no catalogue")
-
-        return products
-
-    def _window(self, since: str | None) -> Iterator[dict[str, Any]]:
-        """One connection's worth, stopping short of the pagination cap."""
-        cursor: str | None = None
-        taken = 0
-        query = _SINCE.format(since) if since else None
-
-        while taken < _WINDOW:
-            page = self._page(cursor, query)
-            nodes = page.get("nodes") or []
-            yield from nodes
-            taken += len(nodes)
-
-            info = page.get("pageInfo") or {}
-            if not info.get("hasNextPage"):
-                return
-            cursor = info.get("endCursor")
-
-    def sweep(self) -> Iterator[dict[str, Any]]:
-        """Every product the store lists, across as many windows as it takes.
-
-        Windows overlap at their boundary, because several products can share
-        one creation second and excluding that second would drop them. So the
-        products already seen are tracked, and a window that yields none of
-        them ends the sweep — including the pathological one where more than a
-        cap's worth share a single timestamp and no boundary can advance.
-        """
-        seen: set[str] = set()
-        since: str | None = None
-
-        while True:
-            fresh = 0
-            boundary: str | None = None
-
-            for node in self._window(since):
-                boundary = node.get("createdAt") or boundary
-                handle = str(node.get("handle") or "")
-                if handle in seen:
-                    continue
-
-                seen.add(handle)
-                fresh += 1
-                yield node
-
-            if not fresh or boundary is None:
-                return
-            since = boundary
-
-
-def _held_panels(store: Store) -> dict[str, dict[str, Any]]:
-    """Every stored Open Food Facts panel, by barcode, read once.
-
-    `Store.find` re-reads the shards from disk on purpose: it guards a page
-    load, and a cache there could cost the user one. In a loop that intent
-    inverts — a search narrowing over five hundred candidates would read the
-    whole store five hundred times — so the read happens once per search here.
+    `urlencode` encodes the `[` and `]` the endpoint's parameter names carry;
+    left raw they are rejected as a malformed query.
     """
-    return {
-        str(product["id"]): {
-            key: product[key]
-            for key in NUTRIENT_KEYS
-            if product.get(key) is not None
+    params = urlencode(
+        {
+            "q": query,
+            "resources[type]": "product",
+            "resources[limit]": str(min(limit, _MAX_SUGGEST)),
         }
-        for product in store.all()
-        if product.get("source") == "openfoodfacts"
+    )
+    return f"{SUGGEST_URL}?{params}"
+
+
+def _absolute(url: str | None) -> str:
+    """The product URL as a whole address; the endpoint returns a path."""
+    path = str(url or "")
+    if path.startswith(("http://", "https://")):
+        return path
+    return f"{STORE_URL}{path}"
+
+
+def _search_name(title: str) -> str:
+    """The product name without a pack size at either end."""
+    size = _PACK_SIZE.search(title)
+    if size is None:
+        return title.replace(",", " ")
+
+    before = title[: size.start()].strip(" ,-×x")
+    after = title[size.end() :].strip(" ,-×x")
+    return before or after or title
+
+
+def _entry(product: dict[str, Any]) -> dict[str, Any] | None:
+    """One suggest product as a search row, or nothing.
+
+    Refused rather than repaired: a non-food category has no panel to ever
+    acquire, and a row with no name or no price is not an offer. The suggest
+    endpoint publishes no barcode, so there is no `off:` reference to set and
+    no panel path to point at — the row is shown for its price alone.
+    """
+    if not is_food(str(product.get("type") or "")):
+        return None
+
+    name = str(product.get("title") or "")
+    price = _decimal(product.get("price"))
+    if not name or price is None:
+        return None
+
+    return {
+        "id": str(product.get("id") or ""),
+        "name": _search_name(name),
+        "display_name": name,
+        "brand": str(product.get("vendor") or ""),
+        "price": price,
+        # The title states net content; there is no shipping weight here.
+        "pack_grams": net_grams(name),
+        "available": bool(product.get("available")),
+        "url": _absolute(product.get("url")),
     }
 
 
-def _panel(
-    panels: dict[str, dict[str, Any]], entry: dict[str, Any]
-) -> dict[str, Any]:
-    """The nutrition already held for this barcode, if any is.
+def _result(entry: dict[str, Any], match: dict[str, Any]) -> dict[str, Any]:
+    """One suggest row as a search result: what it is, and what it costs.
 
-    Only an external barcode is looked up. An in-store code would collide with
-    whatever manufacturer's product happens to share those digits, which is a
-    wrong panel rather than a missing one.
+    There is no panel, so no nutrient key and no `grams` basis for one beyond
+    the pantry default of 100. The price and its per-100 g rate are the whole
+    answer, and neither price-per-calorie nor price-per-protein can be given
+    without the panel this row does not carry.
     """
-    reference = entry.get("ref")
-    if not reference:
-        return {}
+    price, pack = entry["price"], entry["pack_grams"]
+    name, brand = entry["display_name"], entry["brand"]
 
-    return panels.get(reference.removeprefix("off:"), {})
-
-
-def _priced(
-    entry: dict[str, Any],
-    panel: dict[str, Any],
-    fetched_at: str,
-    diet: str | None = None,
-) -> dict[str, Any]:
-    """One catalogue row as a search result: what it is, and what it costs.
-
-    Nutrients are per 100 g, as every pantry result is, so `grams` says 100
-    and the pack weight keeps its own key. The unit prices are the reason the
-    two are carried together: neither half states what a gram of protein cost.
-    """
-    price: Decimal | None = entry.get("price")
-    pack: Decimal | None = entry.get("pack_grams")
-    name, brand = entry["name"], entry.get("brand", "")
-
-    result: dict[str, Any] = {
+    return {
         "id": entry["id"],
         "name": name,
         "title": f"{name} ({brand})" if brand else name,
         "brand": brand,
-        **panel,
         "grams": 100,
         "source": RETAILER,
         "price": price,
-        "currency": entry.get("currency"),
+        "currency": _CURRENCY,
         "pack_grams": pack,
         "price_per_100g": price_per_100_grams(price, pack),
-        "price_per_100kcal": price_per_100_kcal(
-            price, pack, panel.get("kcal")
-        ),
-        "price_per_g_protein": price_per_gram(
-            price, pack, panel.get("protein")
-        ),
-        # Stamped per row: a price is only true as of the sweep that read it.
-        "price_at": fetched_at,
-        "available": entry.get("available"),
-        # What the export concluded from the ingredients, where it could tell.
-        # Absent means unknown, which a filter must not read as either answer.
-        "diet": diet,
-        "url": entry.get("url"),
+        "available": entry["available"],
+        "url": entry["url"],
+        "match": match,
     }
-
-    # Where the panel would come from, so an agent can go and acquire it.
-    if entry.get("ref"):
-        result["ref"] = entry["ref"]
-
-    return result
 
 
 class UmallProvider(Provider):
-    """Search a refreshed Umall catalogue, priced against held nutrition."""
+    """Search Umall's live suggest endpoint for prices, and nothing else."""
 
     name = RETAILER
 
     searchable = True
     acquirable = False
 
-    # Reads a file, so it costs nothing and answers without `--remote`.
-    remote = False
+    # Costs a request, so a search asks it only under `--shop umall`.
+    remote = True
 
-    def __init__(
-        self, store: Store, path: Path, diets: dict[str, str] | None = None
-    ) -> None:
-        self._store = store
-        self._path = path
-        self._diets = diets or {}
-
-    @property
-    def enabled(self) -> bool:
-        """False until a catalogue exists.
-
-        A clone that has never refreshed drops out of the fan-out silently,
-        exactly as an unconfigured provider does, rather than failing every
-        search with a message about a file the user never asked for.
-        """
-        return self._path.is_file()
+    def __init__(self, fetch: Fetch | None = None) -> None:
+        self._fetch = fetch or _get
 
     def search(self, query: str, limit: int) -> list[dict]:
-        document = read_catalog(self._path)
-        entries = document["products"]
-        fetched_at = document["fetched_at"]
+        products = self._products(query, limit)
+        entries = [row for row in map(_entry, products) if row is not None]
 
-        matched = Local(entries).ranked(query, limit)
-        panels = _held_panels(self._store) if matched else {}
+        # Ranked the same way every source is, so one model spans every shop.
+        scored = Local(entries).scored(query, limit)
+        return [_result(entry, match) for entry, match in scored]
 
-        return [
-            _priced(
-                entry,
-                _panel(panels, entry),
-                fetched_at,
-                self._diets.get(str(entry["id"])),
-            )
-            for entry in matched
-        ]
+    def _products(self, query: str, limit: int) -> list[dict]:
+        """The suggest endpoint's product list, or the reason there is none."""
+        try:
+            payload = json.loads(self._fetch(_url(query, limit)))
+        except OSError as exc:
+            raise RemoteFailure(f"Umall could not be reached: {exc}") from None
+        except ValueError:
+            raise RemoteFailure("Umall returned a response that is not JSON")
+
+        results = ((payload.get("resources") or {}).get("results")) or {}
+        products = results.get("products")
+        return products if isinstance(products, list) else []

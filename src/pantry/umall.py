@@ -1,13 +1,12 @@
-"""Reading Umall's catalogue, and pricing what it sells by the unit.
+"""Reading what Umall sells, and pricing it by the unit.
 
-Umall is a Shopify storefront, so its whole catalogue is one cursor-paged
-query and no page has to be scraped. It publishes no nutrition at all: a row
-here carries identity, weight and price, and the panel is whatever
-`off:<barcode>` already holds. That split is the point — a price decays within
-a week and a nutrition record does not, so the two never share a record.
+Umall publishes no nutrition at all: a search row carries a name, a price and,
+where the title states one, a pack weight. The panel, if it is ever wanted, is
+a separate concern. That split is the point — a price decays within a week and
+a nutrition record does not, so the two never share a record.
 
-Nothing here performs I/O: a payload arrives as parsed JSON and leaves as a
-row, so every test runs offline.
+Nothing here performs I/O: the parsing and pricing helpers take values and
+return values, so every test runs offline.
 """
 
 import re
@@ -29,15 +28,10 @@ _IN_STORE_PREFIXES = frozenset(
 # A GTIN is one of four lengths; anything else is an internal part number.
 _GTIN_LENGTHS = frozenset((8, 12, 13, 14))
 
-# Shopify states weight in one of four units. Only two convert exactly, and a
-# guessed pound is a wrong unit price rather than a missing one.
-_TO_GRAMS = {"GRAMS": Decimal(1), "KILOGRAMS": Decimal(1000)}
-
 
 # Umall is a general store: a quarter of what it lists is nappies, face cream,
 # kitchenware and cleaning products. None of it will ever have a nutrition
-# panel, so holding it inflates every coverage figure and sends a backfill to
-# ask a food database about shower gel.
+# panel, so a search for food is better off never showing it.
 #
 # Listed by exact name rather than by keyword, because "Health & Pharmacy"
 # contains supplements and "Dried Groceries" contains food: a substring rule
@@ -189,71 +183,6 @@ def net_grams(title: str) -> Decimal | None:
     count = found["before"] or found["after"] or found["named"]
 
     return (amount * int(count) if count else amount).normalize()
-
-
-def _grams(variant: dict[str, Any]) -> Decimal | None:
-    """The pack weight in grams, where the store stated one it can state.
-
-    Zero is not a weight: produce sold by the piece reports it, and treating
-    it as one would divide by zero. Absent means the pack cannot be priced by
-    weight, which is a different answer from free.
-    """
-    factor = _TO_GRAMS.get(str(variant.get("weightUnit") or ""))
-    weight = _decimal(variant.get("weight"))
-    if factor is None or weight is None or weight == 0:
-        return None
-
-    return (weight * factor).normalize()
-
-
-def catalog_entry(node: dict[str, Any]) -> dict[str, Any] | None:
-    """One Storefront product node as a catalogue row, or nothing.
-
-    Refused rather than repaired: a row with no barcode has no identity, and
-    one with no price is not an offer. Both happen, and both are rows this
-    catalogue is better off not holding than holding a guess about.
-    """
-    variants = (node.get("variants") or {}).get("nodes") or []
-    if not variants:
-        return None
-
-    variant = variants[0]
-    barcode = variant.get("barcode")
-    name = str(node.get("title") or "")
-    price = _decimal((variant.get("price") or {}).get("amount"))
-    if not barcode or not name or price is None:
-        return None
-
-    entry: dict[str, Any] = {
-        "id": str(barcode),
-        "name": name,
-        "brand": str(node.get("vendor") or ""),
-        "type": str(node.get("productType") or ""),
-        "tags": [str(tag) for tag in node.get("tags") or []],
-        "price": price,
-        "currency": str(
-            (variant.get("price") or {}).get("currencyCode") or ""
-        ),
-    }
-
-    # The title states net content; the storefront states shipping weight.
-    # The first is what a unit price should divide by, so it wins where the
-    # title states one at all.
-    grams = net_grams(name) or _grams(variant)
-    if grams is not None:
-        # Not `grams`: that key names the weight a panel describes, and
-        # `rescale` overwrites it. A pack weight under it would be relabelled
-        # by `--grams` rather than left alone.
-        entry["pack_grams"] = grams
-
-    entry["available"] = bool(variant.get("availableForSale"))
-    entry["url"] = f"{STORE_URL}/products/{node.get('handle') or ''}"
-
-    # Only where another database could hold the panel this row lacks.
-    if is_external_gtin(str(barcode)):
-        entry["ref"] = f"off:{barcode}"
-
-    return entry
 
 
 def _rate(price: Decimal | None, quantity: Decimal | None) -> Decimal | None:

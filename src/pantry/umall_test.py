@@ -1,11 +1,10 @@
-"""What a catalogue row is, and what it costs per unit of nutrition."""
+"""What a title says a pack holds, and what it costs per unit of it."""
 
 from decimal import Decimal
 
 import pytest
 
 from pantry.umall import (
-    catalog_entry,
     is_external_gtin,
     is_food,
     net_grams,
@@ -13,29 +12,6 @@ from pantry.umall import (
     price_per_100_kcal,
     price_per_gram,
 )
-
-
-def node(**overrides: object) -> dict:
-    """One Storefront product node, in the shape the API returns it."""
-    variant = {
-        "sku": "A9352792000258",
-        "barcode": "9352792000258",
-        "weight": 300.0,
-        "weightUnit": "GRAMS",
-        "price": {"amount": "4.29", "currencyCode": "AUD"},
-        "availableForSale": True,
-    }
-    variant.update(overrides.pop("variant", {}))  # type: ignore[arg-type]
-    base = {
-        "handle": "max-bean-silken-tofu-300g",
-        "title": "Max Bean Silken Tofu 300g",
-        "vendor": "Max Bean",
-        "productType": "Tofu",
-        "tags": ["tofu", "fresh"],
-        "variants": {"nodes": [variant]},
-    }
-    base.update(overrides)
-    return base
 
 
 class TestExternalGtin:
@@ -106,101 +82,8 @@ class TestIsFood:
         assert not is_food("  face care  ")
 
     def test_a_keyword_alone_does_not_exclude(self) -> None:
-        """"Care" appears in non-food names; it must not condemn a food one."""
+        """A non-food keyword must not condemn a food product name."""
         assert is_food("Careful Farms Rolled Oats")
-
-
-class TestCatalogEntry:
-    """The row the catalogue holds, and what it refuses to hold."""
-
-    def test_a_product_becomes_a_row(self) -> None:
-        entry = catalog_entry(node())
-
-        assert entry == {
-            "id": "9352792000258",
-            "name": "Max Bean Silken Tofu 300g",
-            "brand": "Max Bean",
-            "type": "Tofu",
-            "tags": ["tofu", "fresh"],
-            "price": Decimal("4.29"),
-            "currency": "AUD",
-            "pack_grams": Decimal("300"),
-            "available": True,
-            "url": "https://www.umall.com.au/products/"
-            "max-bean-silken-tofu-300g",
-            "ref": "off:9352792000258",
-        }
-
-    def test_an_in_store_code_carries_no_reference(self) -> None:
-        """Nothing else knows the code, so no lookup is offered for it."""
-        entry = catalog_entry(node(variant={"barcode": "9202402231777"}))
-
-        assert entry is not None
-        assert entry["id"] == "9202402231777"
-        assert "ref" not in entry
-
-    def test_the_title_beats_the_shipping_weight(self) -> None:
-        """78 g of noodles in a 226 g parcel: the parcel is not the food."""
-        entry = catalog_entry(
-            node(
-                title="Nissin Cup Noodles - 78g",
-                variant={"weight": 226.0, "weightUnit": "GRAMS"},
-            )
-        )
-
-        assert entry is not None
-        assert entry["pack_grams"] == Decimal("78")
-
-    def test_the_shipping_weight_is_used_where_no_title_states_one(
-        self,
-    ) -> None:
-        entry = catalog_entry(
-            node(
-                title="Frozen Kurobuta Pork Hind Hock",
-                variant={"weight": 1.25, "weightUnit": "KILOGRAMS"},
-            )
-        )
-
-        assert entry is not None
-        assert entry["pack_grams"] == Decimal("1250")
-
-    @pytest.mark.parametrize("unit", ["POUNDS", "OUNCES"])
-    def test_an_imperial_weight_is_left_absent(self, unit: str) -> None:
-        """Converting would invent a precision the store never stated."""
-        entry = catalog_entry(
-            node(title="Mystery Item", variant={"weightUnit": unit})
-        )
-
-        assert entry is not None
-        assert "pack_grams" not in entry
-
-    def test_an_unweighed_product_omits_grams(self) -> None:
-        """Fresh produce sold by the piece: zero is not a weight."""
-        entry = catalog_entry(
-            node(title="Papaya - 1 Piece", variant={"weight": 0.0})
-        )
-
-        assert entry is not None
-        assert "pack_grams" not in entry
-
-    def test_a_product_with_no_variant_is_refused(self) -> None:
-        assert catalog_entry(node(variants={"nodes": []})) is None
-
-    def test_a_product_with_no_barcode_is_refused(self) -> None:
-        """Identity is the barcode, so a row without one cannot be held."""
-        assert catalog_entry(node(variant={"barcode": None})) is None
-
-    def test_a_product_with_no_title_is_refused(self) -> None:
-        assert catalog_entry(node(title="")) is None
-
-    def test_an_unpriced_product_is_refused(self) -> None:
-        assert catalog_entry(node(variant={"price": None})) is None
-
-    def test_a_missing_brand_is_empty_rather_than_absent(self) -> None:
-        entry = catalog_entry(node(vendor=""))
-
-        assert entry is not None
-        assert entry["brand"] == ""
 
 
 class TestNetGrams:
@@ -247,9 +130,9 @@ class TestUnitPrice:
     """What a pack costs per unit of the thing being compared."""
 
     def test_price_per_100_grams(self) -> None:
-        assert price_per_100_grams(
-            Decimal("4.29"), Decimal("300")
-        ) == Decimal("1.43")
+        assert price_per_100_grams(Decimal("4.29"), Decimal("300")) == Decimal(
+            "1.43"
+        )
 
     def test_price_per_100_kcal_uses_the_whole_pack(self) -> None:
         """300 g at 55 kcal per 100 g is 165 kcal, so $4.29 buys 165."""
