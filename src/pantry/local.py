@@ -54,6 +54,10 @@ _WORD_CUTOFF = 80
 _PREFIX_SCORE = 90
 _MIN_PREFIX = 3
 
+# A head word the query never mentioned names a different food, so it must
+# cost more than the +50 naming the food is worth: `Lemon peel` is not lemon.
+_HEAD_MISS = 60
+
 _SPLIT = re.compile(r"[^0-9a-z]+")
 
 
@@ -65,6 +69,28 @@ def _fold(text: str) -> str:
 
 def _words(text: str) -> list[str]:
     return [word for word in _SPLIT.split(_fold(text)) if len(word) > 1]
+
+
+def _matches(words: list[str], token: str) -> bool:
+    """Whether any of `words` is the same word as `token`, near enough."""
+    return any(fuzz.ratio(word, token) >= _WORD_CUTOFF for word in words)
+
+
+def split_name(name: str) -> tuple[list[str], list[str]]:
+    """A name as the food it is, plus the words narrowing it down.
+
+    Two conventions have to read the same. AFCD writes `Oil, olive`: the food
+    comes first and every later comma segment narrows it. Retail writes
+    `Olive Oil Rusk`: the food comes last and everything before it narrows it.
+    Reading both as "the first word is the most specific" is what made a
+    biscuit the best answer for olive oil.
+    """
+    segments = [w for w in (_words(part) for part in name.split(",")) if w]
+    if not segments:
+        return [], []
+    if len(segments) > 1:
+        return segments[0], [word for s in segments[1:] for word in s]
+    return segments[0][-1:], segments[0][:-1]
 
 
 def as_result(product: Product) -> dict:
@@ -104,6 +130,7 @@ class Local:
         self._products = products
         self._index: dict[str, list[int]] | None = None
         self._vocabulary: list[str] = []
+        self._split: dict[int, tuple[list[str], list[str]]] = {}
 
     def _build(self) -> dict[str, list[int]]:
         """Map each distinct word to the products carrying it.
@@ -160,43 +187,40 @@ class Local:
             return []
 
         totals: dict[int, float] = defaultdict(float)
+        matched: dict[int, set[str]] = defaultdict(set)
         for token in tokens:
             # Only a product's best word counts; repetition must not inflate.
             best: dict[int, int] = {}
             best_words: dict[int, str] = {}
             for word, score in self._word_scores(token).items():
                 for position in index[word]:
+                    # Every close word is accounted for, not just the best:
+                    # `Cumin (cummin) seed` spells the same word twice and
+                    # neither spelling is an unasked-for one.
+                    matched[position].add(word)
                     if score > best.get(position, 0):
                         best[position] = score
                         best_words[position] = word
 
             for position, score in best.items():
-                product = self._products[position]
-                name = product.get("name", "")
-                head_segment = name.split(",")[0]
-                head_words = _words(head_segment)
+                head, qualifiers = self._parts(position)
                 matched_word = best_words[position]
 
-                # A head-of-name match outscores one against a modifier.
+                # Naming the food outscores merely qualifying it. An exact
+                # whole-name match is deliberately no better than a tie, so
+                # `Chicken Breast` and `Chicken, breast, lean flesh, raw`
+                # part on source trust rather than on brevity.
                 word_score = score
-                if head_words:
-                    if fuzz.ratio(head_words[0], matched_word) >= _WORD_CUTOFF:
-                        word_score += 50
-                        if (
-                            len(head_words) == 1
-                            and len(tokens) == 1
-                            and score >= 100
-                        ):
-                            word_score += 25
-                        elif len(head_words) == len(tokens) and score >= 100:
-                            word_score += 20
-                    elif any(
-                        fuzz.ratio(hw, matched_word) >= _WORD_CUTOFF
-                        for hw in head_words[: len(tokens)]
-                    ):
-                        word_score += 20
+                if _matches(head, matched_word):
+                    word_score += 50
+                elif _matches(qualifiers, matched_word):
+                    word_score += 20
 
                 totals[position] += word_score
+
+        for position, seen in matched.items():
+            head, _ = self._parts(position)
+            totals[position] -= _HEAD_MISS * sum(w not in seen for w in head)
 
         ranked = sorted(totals, key=lambda p: self._rank(p, totals[p]))
         return [self._products[p] for p in ranked[:limit]]
@@ -211,6 +235,13 @@ class Local:
             else len(SOURCE_TRUST)
         )
         return (-total, trust, id_sort_key(str(product.get("id"))))
+
+    def _parts(self, position: int) -> tuple[list[str], list[str]]:
+        """Cached: a name is split once per query, not once per query word."""
+        if position not in self._split:
+            name = self._products[position].get("name", "")
+            self._split[position] = split_name(name)
+        return self._split[position]
 
     def find(self, source: str, product_id: str) -> Product | None:
         """Exact composite-identity lookup: no fuzz, no network."""
