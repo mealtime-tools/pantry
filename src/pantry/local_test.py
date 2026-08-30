@@ -238,3 +238,23 @@ class TestMatchConfidence:
                 {"source": "afcd", "id": "F1", "name": "Oil, olive",
                  "match": {"score": Decimal("1"), "tier": "composition"}}
             )
+
+
+class TestVariantTieBreak:
+    """A preparation the query did not name is a tie-break, not a demerit.
+
+    Ground cinnamon is inherently dried; scoring it down for saying so lost it
+    to a donut named after it.
+    """
+
+    def test_a_stated_preparation_does_not_cost_a_record_its_source(
+        self,
+    ) -> None:
+        rows = [
+            product("coles", "Donuts Cinnamon"),
+            product("afcd", "Cinnamon, dried, ground"),
+        ]
+
+        best = Local(rows).search("cinnamon", limit=1)
+
+        assert best[0]["source"] == "afcd"

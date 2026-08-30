@@ -70,9 +70,9 @@ _MIN_PREFIX = 3
 # cost more than the +50 naming the food is worth: `Lemon peel` is not lemon.
 _HEAD_MISS = 60
 
-# Qualifiers naming a different food rather than a more precise one. A query
-# that asks for one lifts its penalty, so `fried rice` and `dried oregano`
-# still find what they asked for; a query that does not gets the plain food.
+# Qualifiers naming a different food rather than a more precise one. Counted
+# rather than scored, so a query that asks for one still finds it and a record
+# is never sunk for stating a preparation the query simply did not mention.
 _VARIANTS = frozenset(
     (
         "fried", "baked", "boiled", "grilled", "roasted", "toasted",
@@ -82,10 +82,6 @@ _VARIANTS = frozenset(
         "free", "reduced", "low", "skim", "lite", "decaffeinated",
     )
 )
-
-# Enough to sink a variant behind its plain sibling without letting a pile of
-# them outweigh naming the food itself.
-_VARIANT_COST = 30
 
 # What a record named exactly for the query scores: one word naming the food
 # and the rest qualifying it. The denominator that turns a score into a
@@ -294,17 +290,19 @@ class Local:
                 totals[position] += word_score
 
         leftover: dict[int, int] = {}
+        variants: dict[int, int] = {}
         for position, seen in matched.items():
             head, qualifiers = self._parts(position)
             spare = [word for word in qualifiers if word not in seen]
             totals[position] -= _HEAD_MISS * sum(w not in seen for w in head)
-            totals[position] -= _VARIANT_COST * sum(
-                word in _VARIANTS for word in spare
-            )
             leftover[position] = len(spare)
+            variants[position] = sum(word in _VARIANTS for word in spare)
 
         ranked = sorted(
-            totals, key=lambda p: self._rank(p, totals[p], leftover[p])
+            totals,
+            key=lambda p: self._rank(
+                p, totals[p], variants[p], leftover[p]
+            ),
         )
         return [
             (
@@ -319,12 +317,19 @@ class Local:
             for p in ranked[:limit]
         ]
 
-    def _rank(self, position: int, total: float, leftover: int = 0):
+    def _rank(
+        self,
+        position: int,
+        total: float,
+        variants: int = 0,
+        leftover: int = 0,
+    ):
         """Score first, then a stable tie-break so output is reproducible.
 
-        Trust outranks `leftover` deliberately: a bare retail name carries no
+        Trust outranks both counts deliberately. A bare retail name carries no
         spare words at all, and letting that beat `Chicken, breast, lean
-        flesh, raw` is the whole reason this ordering exists.
+        flesh, raw` is the whole reason this ordering exists; and ground
+        cinnamon is inherently dried, so saying so must not lose it a donut.
         """
         product = self._products[position]
         source = product.get("source")
@@ -336,6 +341,7 @@ class Local:
         return (
             -total,
             trust,
+            variants,
             leftover,
             id_sort_key(str(product.get("id"))),
         )
