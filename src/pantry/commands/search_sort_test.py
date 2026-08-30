@@ -46,35 +46,6 @@ class TestProteinDensity:
         assert [r["name"] for r in ordered] == ["Whole", "Half"]
 
 
-class TestPrice:
-    """Cheapest first, and the unpriced left where they were."""
-
-    def test_the_cheapest_per_100_grams_comes_first(self) -> None:
-        dear = result("Dear", price_per_100g=Decimal("5.64"))
-        cheap = result("Cheap", price_per_100g=Decimal("1.43"))
-
-        ordered = _sorted([dear, cheap], "price-per-100g")
-
-        assert [r["name"] for r in ordered] == ["Cheap", "Dear"]
-
-    def test_the_cheapest_protein_comes_first(self) -> None:
-        dear = result("Dear", price_per_g_protein=Decimal("0.85"))
-        cheap = result("Cheap", price_per_g_protein=Decimal("0.09"))
-
-        ordered = _sorted([dear, cheap], "price-per-g-protein")
-
-        assert [r["name"] for r in ordered] == ["Cheap", "Dear"]
-
-    def test_an_unweighed_product_sorts_last(self) -> None:
-        """Sold by the piece: no unit price, and not a free one either."""
-        piece = result("Papaya", price_per_100g=None)
-        pack = result("Tofu", price_per_100g=Decimal("1.43"))
-
-        ordered = _sorted([piece, pack], "price-per-100g")
-
-        assert [r["name"] for r in ordered] == ["Tofu", "Papaya"]
-
-
 def test_sorting_keeps_every_result() -> None:
     """A reorder is not a filter: nothing is dropped for being unrankable."""
     results = [

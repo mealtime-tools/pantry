@@ -27,7 +27,6 @@ dependencies = [
     "python-dotenv>=1.0",
     "click>=8.1",
     "rapidfuzz>=3.9",
-    "duckdb>=1.5.5",
 ]
 
 [project.urls]

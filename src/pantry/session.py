@@ -6,14 +6,12 @@ and no home directory.
 """
 
 import contextlib
-from collections.abc import Callable, Generator, Iterable, Iterator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import click
-from agentcli import UsageError, emit_error
+from agentcli import emit_error
 
 from pantry.nutrition import NutritionError
 from pantry.open_food_facts import RemoteFailure
@@ -35,28 +33,6 @@ _EXIT_CODES: tuple[tuple[type[Exception], int], ...] = (
 )
 
 
-def _utc_now() -> str:
-    """The instant a catalogue was read, to the second, in UTC."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _no_sweep() -> Iterator[dict]:
-    """A run that was never given a storefront to sweep."""
-    raise UsageError("this run has no storefront configured to refresh")
-    yield  # pragma: no cover - unreachable, and what makes this a generator
-
-
-def _no_dump() -> Iterator[str]:
-    """A run that was never given an export to read."""
-    raise UsageError("this run has no product export configured to read")
-    yield  # pragma: no cover - unreachable, and what makes this a generator
-
-
-def _no_panels(wanted: Iterable[str]) -> Any:
-    """A run that was never given a parquet export to query."""
-    raise UsageError("this run has no product export configured to read")
-
-
 @dataclass
 class Deps:
     """The effects the CLI has."""
@@ -65,21 +41,6 @@ class Deps:
     providers: Providers
     write_out: Callable[[Path, str], None]
     json_output: bool = False
-
-    # Where retailer catalogues are written. The store's own directory, so a
-    # user has one place holding everything the tool wrote for them.
-    catalog_dir: Path = Path()
-
-    # The network act `refresh` performs, and the clock that stamps it. Both
-    # are injected so the command is testable with neither.
-    sweep: Callable[[], Iterator[dict]] = _no_sweep
-    now: Callable[[], str] = _utc_now
-
-    # The other network act: the product export a backfill reads. Two shapes,
-    # because the two exports are read differently — the CSV streams as lines,
-    # and the parquet is queried for the barcodes wanted.
-    dump: Callable[[], Iterator[str]] = _no_dump
-    panels: Callable[[Iterable[str]], Any] = _no_panels
 
 
 def deps(ctx: click.Context) -> Deps:

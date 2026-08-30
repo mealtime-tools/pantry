@@ -7,7 +7,6 @@ from agentcli import json_option, limit_option
 
 from pantry.commands import grams_option
 from pantry.commands.describe import describe
-from pantry.diet import MEATLESS
 from pantry.local import result_with_nulls
 from pantry.output import emit
 from pantry.products import rescale
@@ -15,8 +14,8 @@ from pantry.providers import PROVIDER_NAMES
 from pantry.session import deps, guard, wants_json
 
 # What a result may be ordered by, and which way round is "best first".
-# `protein-per-kcal` wants the most, the price keys want the least.
-SORTS = ("protein-per-kcal", "price-per-100g", "price-per-g-protein")
+# `protein-per-kcal` wants the most of what every panel already states.
+SORTS = ("protein-per-kcal",)
 
 # A filter or a sort needs candidates to work on. Asking a provider for
 # exactly `--limit` and then discarding most of them would answer almost
@@ -51,18 +50,9 @@ def _sorted(results: list[dict], sort_by: str) -> list[dict]:
     products nothing is known about at one end of the list as if that were an
     answer. They keep their existing order, after the ones that can be ranked.
     """
-    if sort_by == "protein-per-kcal":
-        keys = [(_density(r), r) for r in results]
-        ranked = [(k, r) for k, r in keys if k is not None]
-        ranked.sort(key=lambda pair: -pair[0])
-    else:
-        field = {
-            "price-per-100g": "price_per_100g",
-            "price-per-g-protein": "price_per_g_protein",
-        }[sort_by]
-        keys = [(r.get(field), r) for r in results]
-        ranked = [(k, r) for k, r in keys if k is not None]
-        ranked.sort(key=lambda pair: pair[0])
+    keys = [(_density(r), r) for r in results]
+    ranked = [(k, r) for k, r in keys if k is not None]
+    ranked.sort(key=lambda pair: -pair[0])
 
     unranked = [r for k, r in keys if k is None]
     return [r for _, r in ranked] + unranked
@@ -83,11 +73,6 @@ def _sorted(results: list[dict], sort_by: str) -> list[dict]:
     help="Also ask the providers that cost a network request.",
 )
 @click.option(
-    "--vegetarian",
-    is_flag=True,
-    help="Keep only results a source says are vegetarian or vegan.",
-)
-@click.option(
     "--sort",
     "sort_by",
     type=click.Choice(SORTS),
@@ -102,7 +87,6 @@ def search(
     query: tuple[str, ...],
     sources: tuple[str, ...],
     remote: bool,
-    vegetarian: bool,
     sort_by: str | None,
     grams: Decimal | None,
     json_output: bool,
@@ -115,9 +99,9 @@ def search(
     spending a page load is safe. `--limit` is per provider, `sources` names
     who answered, and `--grams` applies to every result alike: no mixed bases.
 
-    With `--vegetarian` or `--sort`, `--limit` counts what survives instead:
-    the providers are asked for a wider pool first, so a filter has something
-    to filter and a sort ranks products rather than name matches.
+    With `--sort`, `--limit` counts what survives instead: the providers are
+    asked for a wider pool first, so the sort ranks products rather than name
+    matches.
     """
     json_output = wants_json(ctx, json_output)
 
@@ -127,7 +111,7 @@ def search(
             remote=remote, only=tuple(sources)
         )
 
-        narrowing = vegetarian or sort_by is not None
+        narrowing = sort_by is not None
         asked = limit * CANDIDATE_POOL if narrowing else limit
 
         results: list[dict] = []
@@ -137,8 +121,6 @@ def search(
                 for result in provider.search(text, asked)
             )
 
-        if vegetarian:
-            results = [r for r in results if r.get("diet") in MEATLESS]
         if sort_by:
             results = _sorted(results, sort_by)
         if narrowing:
