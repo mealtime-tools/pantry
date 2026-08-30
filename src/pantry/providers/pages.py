@@ -16,6 +16,13 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
 
+# A Chrome string, and the one place this client does not announce itself.
+# Measured 2026-08-30 on the first request of a session, so no reputation had
+# accumulated either way: with urllib's default agent, Woolworths never
+# answers at all and the read times out, and Coles serves a 1 kB Incapsula
+# interstitial as a 200. With this string both serve the product page. It is a
+# filter on the header, not a judgement about the caller. Nothing further is
+# disguised — pacing, the budget, and "a block ends the session" all stand.
 _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
