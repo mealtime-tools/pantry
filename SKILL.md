@@ -59,3 +59,8 @@ missing nutrients, a cooked weight, a barcode, or a price.
 
 Where a record has a `barcode`, it is the GTIN the source printed and is how
 two sources are joined to the same product. Never derive one from an id.
+
+A join is an identity claim, not corroboration. One live GTIN returns 272 kcal
+and 34 g protein from Woolworths and 427 kcal and 28 g from Open Food Facts.
+Where two panels disagree, prefer the retailer's and say the figures differ;
+never average them. Local search already ranks it that way.
