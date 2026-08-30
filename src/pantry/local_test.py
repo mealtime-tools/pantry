@@ -96,3 +96,83 @@ class TestUnmatchedHead:
         best = Local(rows).search("lemon peel", limit=1)
 
         assert best[0]["name"] == "Lemon peel, raw"
+
+
+class TestUnrequestedQualifiers:
+    """A plain query wants the plain food."""
+
+    def test_a_preparation_nobody_asked_for_ranks_below_the_plain(
+        self,
+    ) -> None:
+        rows = [
+            product("afcd", "Garlic, peeled, fresh, fried, no added fat"),
+            product("afcd", "Garlic, peeled, fresh, raw"),
+        ]
+
+        best = Local(rows).search("garlic", limit=1)
+
+        assert best[0]["name"] == "Garlic, peeled, fresh, raw"
+
+    def test_a_preserved_form_ranks_below_the_fresh_one(self) -> None:
+        rows = [
+            product("afcd", "Milk, cow, canned, evaporated, regular"),
+            product("afcd", "Milk, cow, fluid, regular fat (~3.5%)"),
+        ]
+
+        best = Local(rows).search("milk", limit=1)
+
+        assert "evaporated" not in best[0]["name"]
+
+    def test_a_reduced_variant_ranks_below_the_regular_one(self) -> None:
+        rows = [
+            product("afcd", "Cheese, cheddar, natural, reduced fat (~25%)"),
+            product("afcd", "Cheese, cheddar, natural, regular fat"),
+        ]
+
+        best = Local(rows).search("cheddar cheese", limit=1)
+
+        assert best[0]["name"] == "Cheese, cheddar, natural, regular fat"
+
+    def test_asking_for_the_preparation_still_finds_it(self) -> None:
+        rows = [
+            product("afcd", "Rice, white, boiled, no added salt"),
+            product(
+                "afcd", "Rice, white, fried with bacon or ham, egg, prawns"
+            ),
+        ]
+
+        best = Local(rows).search("fried rice", limit=1)
+
+        assert "fried" in best[0]["name"]
+
+    def test_a_query_word_is_not_penalised_as_a_qualifier(self) -> None:
+        rows = [
+            product("afcd", "Oregano, dried"),
+            product("afcd", "Oregano, fresh"),
+        ]
+
+        best = Local(rows).search("dried oregano", limit=1)
+
+        assert best[0]["name"] == "Oregano, dried"
+
+
+class TestLeftoverQualifiers:
+    """Between two records the query fits equally, the narrower one loses."""
+
+    def test_an_extra_qualifier_loses_to_the_bare_name(self) -> None:
+        rows = [product("openfoodfacts", "Quail Eggs"),
+                product("openfoodfacts", "eggs")]
+
+        best = Local(rows).search("eggs", limit=1)
+
+        assert best[0]["name"] == "eggs"
+
+    def test_the_least_qualified_record_of_a_source_wins(self) -> None:
+        rows = [
+            product("afcd", "Oats, rolled, mixed with sugar or honey"),
+            product("afcd", "Oats, rolled, uncooked"),
+        ]
+
+        best = Local(rows).search("rolled oats", limit=1)
+
+        assert best[0]["name"] == "Oats, rolled, uncooked"
