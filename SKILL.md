@@ -15,6 +15,13 @@ Nutrients describe the result's `grams`, always present and 100 unless
 pack or serving size is held, so supply the weight you mean. A per-100 mL panel
 is reported as per 100 g and says so in `basis_note`.
 
+Every result carries `match`, which is how the answer should be judged: a
+`score` from 0 to 1 for how much of the query the name accounted for, and a
+`tier` naming the kind of source — `verified`, `composition`, `crowdsourced`
+or `retail`. Below 0.7 the store answered with something, but not with what
+was asked for; that is when `--remote` is worth the network. Neither key is
+stored, so the same record scores differently for a different query.
+
 `pantry add --input FILE|- --json` accepts one flat JSON object whose `grams`
 is the weight its nutrients describe, 100 g by default. Pantry does not parse
 prose. Energy is `kcal` and every other nutrient is grams; there is no `kj`

@@ -38,6 +38,12 @@ printf '%s\n' '{"grams":90,"kcal":335,"protein":45.6,"fat":7.9,"carbs":4.9}' |
 Unknown standard nutrients are `null`; zero is returned only when the source
 explicitly reported zero.
 
+A search result carries `match`: a `score` from 0 to 1 for how much of the
+query the name accounted for, and a `tier` — `verified`, `composition`,
+`crowdsourced` or `retail` — for the kind of source it came from. Neither is
+stored; the same record answers different queries differently. Below 0.7 the
+human line marks the result `~weak`, which is the cue to try `--remote`.
+
 `pantry delete SOURCE ID` removes a record from that store, and only from
 there: a shipped shard row is refused, and deleting a correction leaves the
 row it shadowed visible again.
