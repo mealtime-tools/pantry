@@ -23,8 +23,18 @@ def describe(product: dict[str, Any]) -> str:
         name = product.get("name", "")
         title = f"{name} ({brand})" if brand else name
 
-    body = f"{_cost(product)}{title}{_weak(product)}"
+    body = f"{_cost(product)}{title}{_weak(product)}{_entered(product)}"
     return f"{identity:<20} {macros:<28} {body}"
+
+
+def _entered(product: dict[str, Any]) -> str:
+    """Say when the figures were keyed in rather than read from the source.
+
+    Same reason as `~weak`: an unmarked line reads as something the tool
+    fetched, and under a retailer identity that is exactly the wrong thing to
+    assume.
+    """
+    return "  ~entered" if product.get("entered") else ""
 
 
 def _weak(product: dict[str, Any]) -> str:

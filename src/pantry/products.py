@@ -52,7 +52,11 @@ PRODUCT_KEYS = (
 NUTRIENT_KEYS = NUTRIENTS
 
 # Written last, so a line read by eye carries the caveat beside its figures.
-BASIS_KEYS = ("basis", "basis_note")
+# `entered` says the figures were keyed in rather than read from the source.
+# Absent is the ordinary case. It exists because a record typed in under a
+# retailer's id and url is otherwise indistinguishable from one the tool
+# fetched, and a blocked shop is exactly when that happens.
+BASIS_KEYS = ("basis", "basis_note", "entered")
 
 # What a record says when its panel was printed per 100 mL, exact for water.
 MILLILITRE_NOTE = "per 100 mL, read as 100 g"
@@ -178,6 +182,11 @@ def assert_identity(product: Product) -> None:
     barcode = product.get("barcode")
     if barcode is not None and not isinstance(barcode, str):
         raise ProductError("product barcode must be a string")
+
+    # Only ever true. A stored `false` would read as a claim that the figures
+    # were fetched, which is not something this flag is in a position to say.
+    if product.get("entered", True) is not True:
+        raise ProductError("product entered must be true when present")
 
 
 def _check_number(

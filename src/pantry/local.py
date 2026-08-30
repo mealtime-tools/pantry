@@ -282,8 +282,9 @@ def as_result(product: Product, match: dict | None = None) -> dict:
             if key in CORE_NUTRIENTS or product.get(key) is not None
         },
     }
-    # Carried when stated: a prepared result reading as as-sold is the bug.
-    for key in ("basis", "basis_note"):
+    # Carried when stated: a prepared result reading as as-sold is the bug,
+    # and so is a keyed-in panel reading as one the tool fetched.
+    for key in ("basis", "basis_note", "entered"):
         if product.get(key):
             result[key] = product[key]
 

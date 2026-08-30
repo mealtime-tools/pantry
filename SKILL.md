@@ -37,7 +37,17 @@ rather than rebuilding it. Coles allows about four or five page loads in a
 burst, and a Coles search spends one of them.
 
 Do not retry a retailer block or bypass bot protection. A refused run is the
-answer; offer `pantry add --input -` instead.
+answer.
+
+When a shop is blocked, do **not** read its page with another tool and type
+the panel into `pantry add --input` under that shop's id or url. A retailer
+panel comes from `pantry add` or it does not get stored. Say the shop is
+blocked and stop; a record that is wrong is worse than one that is missing.
+`--input` is for figures the user gives you, or a label in front of them.
+
+Any record stored through `--input` carries `entered: true` and prints
+`~entered`. Treat those figures as unverified: do not present them as the
+shop's published panel, and do not build on them without saying so.
 
 Nutrients describe the result's `grams`, always present and 100 unless
 `--grams N` on `search` or `lookup` asks for another weight. `pack_grams` is

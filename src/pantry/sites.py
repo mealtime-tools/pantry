@@ -232,14 +232,17 @@ def build_record(
     barcode: str | None = None,
     basis: str | None = None,
     basis_note: str | None = None,
+    entered: bool = False,
 ) -> Product:
     """Assemble a per-100 g record, omitting every field the label omits."""
     optional = {
-        # Absent unless a caller declares one: an unmarked record is as-sold.
+        # Absent unless a caller declares one: an unmarked record is as-sold,
+        # and was read from its source rather than keyed in.
         "basis": basis,
         "basis_note": basis_note,
         "url": url,
         "barcode": barcode,
+        "entered": entered or None,
     }
 
     record: Product = {

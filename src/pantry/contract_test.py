@@ -707,3 +707,49 @@ def test_delete_says_when_a_shipped_record_becomes_visible_again(
     assert json.loads(deleted.output)["data"]["notes"]
     held = store.find("coles", "1516814")
     assert held is not None and held["kcal"] == 391
+
+
+def test_a_keyed_panel_says_so_under_a_retailer_identity(
+    tmp_path: Path,
+) -> None:
+    """A live recipe test stored two Coles records that a model had
+    transcribed from a page the tool itself was blocked from loading. They
+    were indistinguishable from fetched ones. Now they are not.
+    """
+    store = Store(lambda: [_AFCD, _COLES], tmp_path / "store")
+    state = Deps(
+        store=store,
+        providers=Providers([LocalProvider(store)]),
+        write_out=lambda path, text: None,
+    )
+    typed = CliRunner().invoke(
+        main,
+        [
+            "add",
+            "--input",
+            "-",
+            "https://www.coles.com.au/product/oat-puffs-300g-1516814",
+            "--name",
+            "Oat Puffs Cocoa",
+            "--json",
+        ],
+        input='{"kcal":1,"protein":1,"fat":1,"carbs":1}',
+        obj=state,
+    )
+
+    assert typed.exit_code == 0, typed.output
+    assert json.loads(typed.output)["data"]["product"]["entered"] is True
+    assert store.find("coles", "1516814")["entered"] is True
+
+
+def test_a_fetched_panel_makes_no_such_claim() -> None:
+    """Absent means read from the source, which is the ordinary case."""
+    fetched = build_record(
+        source="coles",
+        product_id="1",
+        name="X",
+        brand="",
+        panel={"kcal": 100},
+    )
+
+    assert "entered" not in fetched

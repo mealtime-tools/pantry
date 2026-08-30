@@ -80,3 +80,15 @@ def test_a_good_match_reads_exactly_as_an_unscored_one() -> None:
     )
 
     assert line == describe(PANEL)
+
+
+def test_a_keyed_panel_is_marked_on_the_line() -> None:
+    """A person reads a line, not a payload, and an unmarked line reads as
+    something the tool fetched."""
+    line = describe({**PANEL, "entered": True})
+
+    assert "~entered" in line
+
+
+def test_a_fetched_panel_is_unmarked() -> None:
+    assert "~entered" not in describe(PANEL)

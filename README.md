@@ -91,7 +91,10 @@ and paced; a block stops the run, with no retry, proxy rotation, or CAPTCHA
 handling.
 
 Manual input is one flat JSON object. Its figures are restated to 100 g before
-storage:
+storage, and the record carries `entered: true`, shown as `~entered`. That
+flag exists because a panel typed in under a retailer's id and url is
+otherwise indistinguishable from one the tool fetched, and a blocked shop is
+exactly when someone is tempted to type one:
 
 ```sh
 printf '%s\n' '{"grams":90,"kcal":335,"protein":45.6,"fat":7.9,"carbs":4.9}' |

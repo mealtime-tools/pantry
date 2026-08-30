@@ -365,4 +365,7 @@ def _manual_record(
         url=reference.url if reference else None,
         basis=basis,
         basis_note=basis_note,
+        # Whoever typed these figures, they were not read from the source by
+        # this tool. Under a retailer identity that is the whole difference.
+        entered=True,
     )
