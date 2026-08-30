@@ -35,8 +35,7 @@ class WoolworthsProvider(Provider):
         self._session: SearchSession | None = None
 
     def search(self, query: str, limit: int) -> list[dict]:
-        payload = self._opened().results(query)
-        return read_search(payload, limit, query)
+        return read_search(self._opened().results(query), limit)
 
     def _opened(self) -> SearchSession:
         """The running session, starting one the first time it is needed."""

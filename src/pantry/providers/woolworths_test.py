@@ -29,21 +29,13 @@ def provider(session: FakeSession) -> WoolworthsProvider:
     return WoolworthsProvider(lambda: session)
 
 
-def test_a_search_returns_the_offers_the_page_asked_for() -> None:
-    session = FakeSession(payload(BEGA, FETTA))
-
-    found = provider(session).search("high protein", 10)
-
-    assert sorted(row["id"] for row in found) == ["6026666", "6027911"]
-
-
-def test_a_shop_result_that_does_not_answer_the_query_is_dropped() -> None:
-    """The shop returns its relevance; the ranking keeps what was asked for."""
+def test_a_search_returns_every_offer_the_shop_answered_with() -> None:
+    """Kept whole and in order: the shop's relevance is the ranking."""
     session = FakeSession(payload(BEGA, FETTA))
 
     found = provider(session).search("cheese", 10)
 
-    assert [row["id"] for row in found] == ["6026666"]
+    assert [row["id"] for row in found] == ["6026666", "6027911"]
 
 
 def test_the_browser_opens_once_and_answers_every_query() -> None:

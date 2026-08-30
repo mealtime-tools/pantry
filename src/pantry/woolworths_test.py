@@ -100,20 +100,15 @@ def test_a_payload_with_no_products_is_empty_not_an_error() -> None:
     assert read_search({}, limit=10) == []
 
 
-def test_the_asked_for_product_outranks_the_shop_relevance_order() -> None:
-    """The shop leads with a spread for "bega cheese"; the query did not."""
-    found = read_search(payload(SPREAD, BEGA), limit=10, query="bega cheese")
-
-    assert found[0]["id"] == "6026666"
-
-
-def test_results_carry_how_well_they_answered() -> None:
-    found = read_search(payload(BEGA), limit=10, query="bega cheese")
-
-    assert found[0]["match"]["score"] > 0
-
-
-def test_without_a_query_the_shop_order_is_kept() -> None:
+def test_the_shops_own_order_is_kept() -> None:
+    """It resolves shredded to grated; word matching cannot, so it decides."""
     found = read_search(payload(SPREAD, BEGA), limit=10)
 
     assert [row["id"] for row in found] == ["6069495", "6026666"]
+
+
+def test_no_lexical_score_is_attached_to_a_shop_result() -> None:
+    """A word match would score the shop's right answer badly."""
+    found = read_search(payload(BEGA), limit=10)
+
+    assert "match" not in found[0]
