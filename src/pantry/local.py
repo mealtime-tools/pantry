@@ -66,28 +66,32 @@ _WORD_CUTOFF = 80
 _PREFIX_SCORE = 90
 _MIN_PREFIX = 3
 
+# What matching a word is worth beyond the word score itself: naming the food
+# the record is, against merely narrowing one down.
+_NAMES_FOOD = 50
+_QUALIFIES = 20
+
 # A head word the query never mentioned names a different food, so it must
-# cost more than the +50 naming the food is worth: `Lemon peel` is not lemon.
+# cost more than naming the food is worth: `Lemon peel` is not lemon.
 _HEAD_MISS = 60
 
 # Qualifiers naming a different food rather than a more precise one. Counted
 # rather than scored, so a query that asks for one still finds it and a record
 # is never sunk for stating a preparation the query simply did not mention.
 _VARIANTS = frozenset(
-    (
-        "fried", "baked", "boiled", "grilled", "roasted", "toasted",
-        "poached", "scrambled", "casseroled", "microwaved", "steamed",
-        "canned", "condensed", "evaporated", "dried", "sundried", "smoked",
-        "pickled", "preserved", "sweetened", "salted", "cured",
-        "free", "reduced", "low", "skim", "lite", "decaffeinated",
-    )
+    """
+    fried baked boiled grilled roasted toasted poached scrambled casseroled
+    microwaved steamed canned condensed evaporated dried sundried smoked
+    pickled preserved sweetened salted cured
+    free reduced low skim lite decaffeinated
+    """.split()
 )
 
 # What a record named exactly for the query scores: one word naming the food
 # and the rest qualifying it. The denominator that turns a score into a
 # confidence, so a caller can tell "the right record" from "the least wrong".
-_PERFECT_HEAD = 150
-_PERFECT_QUALIFIER = 120
+_PERFECT_HEAD = 100 + _NAMES_FOOD
+_PERFECT_QUALIFIER = 100 + _QUALIFIES
 
 # Below this the store answered with something, but not with what was asked
 # for: a query word went unanswered, or the record names a food of its own.
@@ -283,9 +287,9 @@ class Local:
                 # part on source trust rather than on brevity.
                 word_score = score
                 if _matches(head, matched_word):
-                    word_score += 50
+                    word_score += _NAMES_FOOD
                 elif _matches(qualifiers, matched_word):
-                    word_score += 20
+                    word_score += _QUALIFIES
 
                 totals[position] += word_score
 
@@ -300,9 +304,7 @@ class Local:
 
         ranked = sorted(
             totals,
-            key=lambda p: self._rank(
-                p, totals[p], variants[p], leftover[p]
-            ),
+            key=lambda p: self._rank(p, totals[p], variants[p], leftover[p]),
         )
         return [
             (

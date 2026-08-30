@@ -8,8 +8,7 @@ from pantry.local import Local
 
 
 def product(source: str, name: str, **fields: object) -> dict:
-    return {"source": source, "id": f"{source}-{name}", "name": name,
-            **fields}
+    return {"source": source, "id": f"{source}-{name}", "name": name, **fields}
 
 
 class TestSourceTrust:
@@ -164,8 +163,10 @@ class TestLeftoverQualifiers:
     """Between two records the query fits equally, the narrower one loses."""
 
     def test_an_extra_qualifier_loses_to_the_bare_name(self) -> None:
-        rows = [product("openfoodfacts", "Quail Eggs"),
-                product("openfoodfacts", "eggs")]
+        rows = [
+            product("openfoodfacts", "Quail Eggs"),
+            product("openfoodfacts", "eggs"),
+        ]
 
         best = Local(rows).search("eggs", limit=1)
 
@@ -204,8 +205,10 @@ class TestMatchConfidence:
 
         found = Local(rows).search("olive oil", limit=1)
 
-        assert found[0]["match"] == {"score": Decimal("1"),
-                                     "tier": "composition"}
+        assert found[0]["match"] == {
+            "score": Decimal("1"),
+            "tier": "composition",
+        }
 
     def test_a_query_word_nothing_answered_lowers_the_score(self) -> None:
         rows = [product("afcd", "Rice, white, uncooked")]
@@ -235,8 +238,12 @@ class TestMatchConfidence:
 
         with pytest.raises(Exception):
             assert_exportable_product(
-                {"source": "afcd", "id": "F1", "name": "Oil, olive",
-                 "match": {"score": Decimal("1"), "tier": "composition"}}
+                {
+                    "source": "afcd",
+                    "id": "F1",
+                    "name": "Oil, olive",
+                    "match": {"score": Decimal("1"), "tier": "composition"},
+                }
             )
 
 
