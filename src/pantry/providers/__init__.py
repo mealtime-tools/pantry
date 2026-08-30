@@ -15,8 +15,8 @@ from pantry.ids import normalize_id
 from pantry.products import Product
 from pantry.sites import product_ref
 
-# Network sources with a live name search. The local store is the default.
-SEARCH_SOURCES = ("umall",)
+# Shops with a live name search. The local store is the silent default.
+SHOP_NAMES = ("umall",)
 
 # Who claims which stable identifier prefix.
 _PREFIXES = {
@@ -92,9 +92,9 @@ class Providers:
             raise UsageError(f"no provider named {name}")
         return provider
 
-    def searchers(self, *, source: str | None = None) -> list[Provider]:
-        """The local store, or the one live source explicitly requested."""
-        provider = self._by_name.get(source or "local")
+    def searchers(self, *, shop: str | None = None) -> list[Provider]:
+        """The local store, or the one live shop explicitly requested."""
+        provider = self._by_name.get(shop or "local")
         if provider is None or not provider.searchable or not provider.enabled:
             return []
 

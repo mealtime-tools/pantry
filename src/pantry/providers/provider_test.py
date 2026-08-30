@@ -4,7 +4,7 @@ import pytest
 from agentcli import UsageError
 
 from pantry.providers import (
-    SEARCH_SOURCES,
+    SHOP_NAMES,
     Provider,
     Providers,
     Reference,
@@ -23,8 +23,8 @@ def names(providers: list[Provider]) -> list[str]:
     return [provider.name for provider in providers]
 
 
-def test_only_umall_is_currently_a_live_search_source() -> None:
-    assert SEARCH_SOURCES == ("umall",)
+def test_only_umall_is_currently_a_live_search_shop() -> None:
+    assert SHOP_NAMES == ("umall",)
 
 
 def test_the_store_is_the_silent_default() -> None:
@@ -33,16 +33,16 @@ def test_the_store_is_the_silent_default() -> None:
     assert names(providers.searchers()) == ["local"]
 
 
-def test_a_source_replaces_the_store_for_that_search() -> None:
+def test_a_shop_replaces_the_store_for_that_search() -> None:
     providers = Providers([Searcher("local"), Searcher("umall")])
 
-    assert names(providers.searchers(source="umall")) == ["umall"]
+    assert names(providers.searchers(shop="umall")) == ["umall"]
 
 
-def test_an_unavailable_source_yields_no_searcher() -> None:
+def test_an_unavailable_shop_yields_no_searcher() -> None:
     providers = Providers([Searcher("local")])
 
-    assert providers.searchers(source="umall") == []
+    assert providers.searchers(shop="umall") == []
 
 
 def test_a_woolworths_stockcode_resolves_to_its_provider() -> None:

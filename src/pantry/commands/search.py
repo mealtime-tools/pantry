@@ -10,7 +10,7 @@ from pantry.commands.describe import describe
 from pantry.local import result_with_nulls
 from pantry.output import emit
 from pantry.products import rescale
-from pantry.providers import SEARCH_SOURCES
+from pantry.providers import SHOP_NAMES
 from pantry.session import deps, guard, wants_json
 
 # What a result may be ordered by, and which way round is "best first".
@@ -61,9 +61,9 @@ def _sorted(results: list[dict], sort_by: str) -> list[dict]:
 @click.command("search")
 @click.argument("query", nargs=-1, required=True)
 @click.option(
-    "--source",
-    type=click.Choice(SEARCH_SOURCES),
-    help="Search this live source instead of the local store.",
+    "--shop",
+    type=click.Choice(SHOP_NAMES),
+    help="Search this live shop instead of the local store.",
 )
 @click.option(
     "--sort",
@@ -78,7 +78,7 @@ def _sorted(results: list[dict], sort_by: str) -> list[dict]:
 def search(
     ctx: click.Context,
     query: tuple[str, ...],
-    source: str | None,
+    shop: str | None,
     sort_by: str | None,
     grams: Decimal | None,
     json_output: bool,
@@ -86,9 +86,9 @@ def search(
 ) -> None:
     """Search for QUERY, locally by default.
 
-    A network call is opted into with `--source`; without it only the store
-    is searched. Finding nothing is success, an empty list and exit 0.
-    `--grams` applies to every result alike, so a response never mixes bases.
+    A network call is opted into with `--shop`; without it only the store is
+    searched. Finding nothing is success, an empty list and exit 0. `--grams`
+    applies to every result alike, so a response never mixes bases.
 
     With `--sort`, `--limit` counts what survives instead: the providers are
     asked for a wider pool first, so the sort ranks products rather than name
@@ -98,7 +98,7 @@ def search(
 
     with guard(json_output):
         text = " ".join(query)
-        providers = deps(ctx).providers.searchers(source=source)
+        providers = deps(ctx).providers.searchers(shop=shop)
 
         narrowing = sort_by is not None
         asked = limit * CANDIDATE_POOL if narrowing else limit

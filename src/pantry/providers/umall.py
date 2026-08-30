@@ -7,7 +7,7 @@ the same way every other source is, and carries no panel and no acquirable
 reference. A row's nutrition, if it is ever wanted, is a separate `add`.
 
 The suggest endpoint is the network act, so a search costs one request and
-answers only under `--source umall`. The transport is injected, so every test
+answers only under `--shop umall`. The transport is injected, so every test
 here runs offline.
 """
 

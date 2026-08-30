@@ -6,7 +6,7 @@ written to a product record.
 
 ```sh
 pantry --json search "greek yoghurt"
-pantry --json search tofu --source umall
+pantry --json search tofu --shop umall
 pantry add off:9323536800014
 pantry add coles:https://www.coles.com.au/product/example-1047
 pantry add usda:2476857
@@ -15,11 +15,11 @@ pantry delete manual sourdough
 ```
 
 Local search reads the shipped shards and everything previously added. If it
-does not identify the product, `--source umall` makes a live request and
-returns current offers with `price`, `currency`, `pack_grams`,
-`price_per_100g`, `available`, and `url`. Where the source publishes an
-external barcode, the result also carries an `off:<barcode>` reference that
-Open Food Facts can resolve into a permanent nutrition record.
+does not identify the product, `--shop umall` makes a live request and returns
+current offers with `price`, `currency`, `pack_grams`, `price_per_100g`,
+`available`, and `url`. Where the shop publishes an external barcode, the
+result also carries an `off:<barcode>` reference that Open Food Facts can
+resolve into a permanent nutrition record.
 
 Umall publishes no nutrition panel, so its live results always have `null`
 macros. Adding a result's `ref` returns and stores a separate nutrition record.
@@ -33,7 +33,7 @@ clear error without storing anything.
 
 Every nutrient describes the record's `grams`, always present and 100 unless
 `--grams N` on `search` or `lookup` asks for another weight. `pack_grams` is a
-live offer's package size and never changes that nutrition basis. A per-100 mL
+shop offer's package size and never changes that nutrition basis. A per-100 mL
 panel is read as per 100 g and says so in `basis_note`.
 
 An item is a flat record in the shared

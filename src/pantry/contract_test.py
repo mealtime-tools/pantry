@@ -111,7 +111,7 @@ class _Shop(Provider):
         ][:limit]
 
 
-def test_source_search_replaces_the_local_store(tmp_path: Path) -> None:
+def test_shop_search_replaces_the_local_store(tmp_path: Path) -> None:
     store = Store(lambda: [_AFCD, _COLES], tmp_path / "store")
     state = Deps(
         store=store,
@@ -121,7 +121,7 @@ def test_source_search_replaces_the_local_store(tmp_path: Path) -> None:
 
     result = CliRunner().invoke(
         main,
-        ["search", "tofu", "--source", "umall", "--json"],
+        ["search", "tofu", "--shop", "umall", "--json"],
         obj=state,
     )
 
@@ -131,12 +131,12 @@ def test_source_search_replaces_the_local_store(tmp_path: Path) -> None:
     assert [row["source"] for row in payload["results"]] == ["umall"]
 
 
-def test_search_help_exposes_only_the_source_selector() -> None:
+def test_search_help_exposes_only_the_shop_selector() -> None:
     result = CliRunner().invoke(main, ["search", "--help"])
 
     assert result.exit_code == 0, result.output
-    assert "--source" in result.output
-    assert "--shop" not in result.output
+    assert "--shop" in result.output
+    assert "--source" not in result.output
     assert "--remote" not in result.output
 
 
