@@ -42,6 +42,59 @@ FIXTURE = (
     ("plain flour", ("flour", "plain"), ("gluten",), "protein", 7, 15),
 )
 
+COMMON_WHOLE_FOODS = (
+    "almonds",
+    "apples",
+    "avocados",
+    "bananas",
+    "broccoli",
+    "brown rice",
+    "carrots",
+    "celery",
+    "chickpeas",
+    "chicken breast",
+    "cucumbers",
+    "eggs",
+    "garlic",
+    "ginger",
+    "green beans",
+    "lentils",
+    "lemons",
+    "milk",
+    "mushrooms",
+    "rolled oats",
+    "olive oil",
+    "onions",
+    "oranges",
+    "peanuts",
+    "pears",
+    "potatoes",
+    "pumpkin",
+    "quinoa",
+    "red capsicum",
+    "salmon",
+    "spinach",
+    "strawberries",
+    "sweet potatoes",
+    "tofu",
+    "tomatoes",
+    "tuna",
+    "walnuts",
+    "beef mince",
+    "pork",
+    "lamb",
+    "corn",
+    "peas",
+    "cabbage",
+    "cauliflower",
+    "zucchini",
+    "cashews",
+    "coconut",
+    "blueberries",
+    "pineapple",
+    "watermelon",
+)
+
 
 @pytest.fixture(scope="module")
 def shipped() -> Local:
@@ -71,4 +124,20 @@ def test_an_ingredient_resolves_to_the_right_kind_of_food(
     assert value is not None, f"{query} -> {best['name']} states no {macro}"
     assert Decimal(low) <= Decimal(value) <= Decimal(high), (
         f"{query} -> {best['name']} has {macro} {value}"
+    )
+
+
+@pytest.mark.parametrize("query", COMMON_WHOLE_FOODS)
+def test_a_common_whole_food_resolves_to_a_composition_record(
+    shipped: Local, query: str
+) -> None:
+    found = shipped.search(query, limit=1)
+    assert found, f"{query} resolved to nothing"
+
+    best = found[0]
+    assert best["match"]["tier"] == "composition", (
+        f"{query} -> {best['source']}:{best['name']}"
+    )
+    assert best["match"]["score"] >= Decimal("0.7"), (
+        f"{query} -> {best['name']} is a weak match"
     )

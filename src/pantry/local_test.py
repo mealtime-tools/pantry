@@ -76,6 +76,26 @@ class TestCommaQualifiedNames:
 
         assert best[0]["name"] == "Brown Onion"
 
+    def test_a_taxonomy_head_does_not_hide_the_food(self) -> None:
+        rows = [
+            product("coles", "Natural Almonds"),
+            product("afcd", "Nut, almond, with skin, raw, unsalted"),
+        ]
+
+        best = Local(rows).search("almonds", limit=1)
+
+        assert best[0]["source"] == "afcd"
+
+    def test_a_parenthetical_synonym_is_not_a_second_food(self) -> None:
+        rows = [
+            product("coles", "Tofu"),
+            product("afcd", "Tofu (soy bean curd), firm, as purchased"),
+        ]
+
+        best = Local(rows).search("tofu", limit=1)
+
+        assert best[0]["source"] == "afcd"
+
 
 class TestUnmatchedHead:
     """A head word the query never asked for names a different food."""
@@ -196,6 +216,22 @@ class TestPlurals:
 
         assert best[0]["name"] == "Egg, chicken, whole, raw"
 
+    @pytest.mark.parametrize(
+        "plural,singular",
+        (("potatoes", "potato"), ("tomatoes", "tomato"), ("berries", "berry")),
+    )
+    def test_an_irregular_plural_matches_its_singular_exactly(
+        self, plural: str, singular: str
+    ) -> None:
+        rows = [
+            product("coles", plural.title()),
+            product("afcd", f"{singular.title()}, raw"),
+        ]
+
+        best = Local(rows).search(plural, limit=1)
+
+        assert best[0]["source"] == "afcd"
+
 
 class TestMatchConfidence:
     """How good the answer is, so a caller can decide to look elsewhere."""
@@ -277,7 +313,6 @@ def test_a_frozen_record_ranks_below_the_fresh_one() -> None:
     best = Local(rows).search("banana", limit=1)
 
     assert best[0]["name"] == "Banana, cavendish, peeled, raw"
-
 
 
 def row(source: str, ident: str, name: str, **fields: object) -> dict:

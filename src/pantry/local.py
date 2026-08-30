@@ -157,6 +157,10 @@ _PERFECT_QUALIFIER = 100 + _QUALIFIES
 WEAK_MATCH = Decimal("0.7")
 
 _SPLIT = re.compile(r"[^0-9a-z]+")
+_PARENTHETICAL = re.compile(r"\([^)]*\)")
+
+# AFCD sometimes puts a broad taxonomy before the food itself.
+_TAXONOMY_HEADS = frozenset({"melon", "nut"})
 
 
 def _fold(text: str) -> str:
@@ -171,6 +175,10 @@ def _words(text: str) -> list[str]:
 
 def _stem(word: str) -> str:
     """A crude singular: enough to tell "eggs" and "egg" apart from nothing."""
+    if word.endswith("ies") and len(word) > 3:
+        return f"{word[:-3]}y"
+    if word.endswith("oes") and len(word) > 3:
+        return word[:-2]
     if word.endswith("s") and not word.endswith("ss"):
         return word[:-1]
     return word
@@ -190,9 +198,19 @@ def split_name(name: str) -> tuple[list[str], list[str]]:
     Reading both as "the first word is the most specific" is what made a
     biscuit the best answer for olive oil.
     """
-    segments = [w for w in (_words(part) for part in name.split(",")) if w]
+    plain = _PARENTHETICAL.sub("", name)
+    segments = [w for w in (_words(part) for part in plain.split(",")) if w]
     if not segments:
         return [], []
+    if (
+        len(segments) > 1
+        and len(segments[0]) == 1
+        and segments[0][0] in _TAXONOMY_HEADS
+    ):
+        return segments[1], [
+            *segments[0],
+            *[w for s in segments[2:] for w in s],
+        ]
     if len(segments) > 1:
         return segments[0], [word for s in segments[1:] for word in s]
     return segments[0][-1:], segments[0][:-1]
