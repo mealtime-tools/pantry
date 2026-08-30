@@ -91,6 +91,61 @@ _VARIANTS = frozenset(
     """.split()
 )
 
+# Words meaning the figures describe the food after it absorbed water. This is
+# not one qualifier among others: rice triples in weight when boiled, so a
+# cooked panel read as a dry one understates protein and energy roughly
+# threefold, and a recipe built on it is wrong by that much. Dry weight is
+# always recoverable arithmetic; cooked weight is not, because the water taken
+# up is not stated. So a cooked record never outranks an uncooked one — a
+# separate rule from `_VARIANTS`, which only breaks ties.
+#
+# `dried` is deliberately absent: dried chickpeas are the dry weight wanted.
+_COOKED = frozenset(
+    """
+    cooked boiled steamed microwaved simmered stewed braised poached
+    reconstituted prepared rehydrated
+    """.split()
+)
+
+# How far below its identically-named peers a panel may sit before it is
+# treated as describing a different state of the food. Water is the only thing
+# that dilutes a panel this much: five records named `Basmati Rice` agree at
+# ~360 kcal and one says 107.6, which is boiled rice on a five-kilo bag of dry.
+_OUTLIER_RATIO = Decimal("0.5")
+
+# Below this many peers there is no consensus to be an outlier from.
+_MIN_PEERS = 3
+
+
+def dilute_outliers(
+    candidates: list[tuple[int, str, Decimal | None]],
+) -> set[int]:
+    """Positions whose energy sits far below their identically-named peers.
+
+    A retailer sometimes prints the cooked panel on a dry product, and the
+    name gives no sign of it. What does give a sign is the other products
+    called the same thing: they agree, and the mislabelled one does not.
+    """
+    groups: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
+    for position, name, kcal in candidates:
+        if kcal is not None:
+            groups[name].append((position, Decimal(kcal)))
+
+    outliers: set[int] = set()
+    for members in groups.values():
+        if len(members) < _MIN_PEERS:
+            continue
+        energies = sorted(k for _, k in members)
+        median = energies[len(energies) // 2]
+        if median <= 0:
+            continue
+        for position, kcal in members:
+            if kcal < median * _OUTLIER_RATIO:
+                outliers.add(position)
+
+    return outliers
+
+
 # What a record named exactly for the query scores: one word naming the food
 # and the rest qualifying it. The denominator that turns a score into a
 # confidence, so a caller can tell "the right record" from "the least wrong".
@@ -299,16 +354,36 @@ class Local:
 
         leftover: dict[int, int] = {}
         variants: dict[int, int] = {}
+        cooked: dict[int, int] = {}
         for position, seen in matched.items():
             head, qualifiers = self._parts(position)
             spare = [word for word in qualifiers if word not in seen]
             totals[position] -= _HEAD_MISS * sum(w not in seen for w in head)
             leftover[position] = len(spare)
             variants[position] = sum(word in _VARIANTS for word in spare)
+            # Only when the query did not ask: "boiled egg" still finds one.
+            cooked[position] = any(word in _COOKED for word in spare)
+
+        # A panel far below its identically-named peers is the same harm as a
+        # cooked one, arrived at without the name ever saying so.
+        diluted = dilute_outliers(
+            [
+                (
+                    position,
+                    _fold(self._products[position].get("name", "")),
+                    self._products[position].get("kcal"),
+                )
+                for position in totals
+            ]
+        )
+        for position in diluted:
+            cooked[position] = True
 
         ranked = sorted(
             totals,
-            key=lambda p: self._rank(p, totals[p], variants[p], leftover[p]),
+            key=lambda p: self._rank(
+                p, totals[p], cooked[p], variants[p], leftover[p]
+            ),
         )
         return [
             (
@@ -327,14 +402,20 @@ class Local:
         self,
         position: int,
         total: float,
+        cooked: bool = False,
         variants: int = 0,
         leftover: int = 0,
     ):
-        """Score first, then a stable tie-break so output is reproducible.
+        """Cooked last, then score, then a stable tie-break.
 
-        Trust outranks both counts deliberately. A bare retail name carries no
-        spare words at all, and letting that beat `Chicken, breast, lean
-        flesh, raw` is the whole reason this ordering exists; and ground
+        `cooked` outranks the score itself, which nothing else here does. A
+        cooked panel silently read as a dry one is off by however much water
+        the food took up — threefold for rice — and that has spoiled real
+        recipes. A worse-matching dry record is still the better answer.
+
+        Trust then outranks both counts deliberately. A bare retail name
+        carries no spare words at all, and letting that beat `Chicken, breast,
+        lean flesh, raw` is the whole reason this ordering exists; and ground
         cinnamon is inherently dried, so saying so must not lose it a donut.
         """
         product = self._products[position]
@@ -345,6 +426,7 @@ class Local:
             else len(SOURCE_TRUST)
         )
         return (
+            cooked,
             -total,
             trust,
             variants,

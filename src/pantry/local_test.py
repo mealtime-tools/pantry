@@ -277,3 +277,103 @@ def test_a_frozen_record_ranks_below_the_fresh_one() -> None:
     best = Local(rows).search("banana", limit=1)
 
     assert best[0]["name"] == "Banana, cavendish, peeled, raw"
+
+
+
+def row(source: str, ident: str, name: str, **fields: object) -> dict:
+    """A record where the id matters: several may share one name."""
+    return {"source": source, "id": ident, "name": name, **fields}
+
+
+class TestCookedIsNeverPreferred:
+    """Cooked figures read as dry have spoiled real recipes.
+
+    Rice roughly triples in weight when boiled, so a cooked panel used as a
+    dry one understates protein and energy about threefold. Dry weight can
+    always be converted forward; cooked weight cannot be converted back,
+    because the water taken up is never stated.
+    """
+
+    def rice(self) -> list[dict]:
+        return [
+            row("afcd", "1", "Rice, white, boiled", kcal=123, protein=2.5),
+            row("afcd", "2", "Rice, white, uncooked", kcal=340, protein=7),
+        ]
+
+    def test_a_cooked_record_never_outranks_an_uncooked_one(self) -> None:
+        top = Local(self.rice()).search("white rice", limit=2)[0]
+
+        assert top["name"] == "Rice, white, uncooked"
+
+    def test_a_worse_name_match_still_beats_a_cooked_one(self) -> None:
+        """Cooked outranks the score itself, which nothing else here does."""
+        products = [
+            row("afcd", "1", "Rice, white, boiled", kcal=123, protein=2.5),
+            row("afcd", "2", "Rice", kcal=340, protein=7),
+        ]
+
+        top = Local(products).search("white rice", limit=2)[0]
+
+        assert top["name"] == "Rice"
+
+    def test_asking_for_cooked_still_finds_it(self) -> None:
+        top = Local(self.rice()).search("boiled rice", limit=2)[0]
+
+        assert top["name"] == "Rice, white, boiled"
+
+    def test_dried_is_not_cooked(self) -> None:
+        """Dried chickpeas are the dry weight wanted, not a preparation."""
+        products = [
+            row("afcd", "1", "Chickpea, dried", kcal=328, protein=19.7),
+            row("coles", "2", "Chickpeas", kcal=328, protein=19.7),
+        ]
+
+        top = Local(products).search("chickpeas", limit=2)[0]
+
+        assert top["id"] == "1"
+
+
+class TestDilutedPanels:
+    """A retailer sometimes prints the cooked panel on a dry product."""
+
+    def bags(self) -> list[dict]:
+        # Five `Basmati Rice` records; one carries a boiled panel.
+        return [
+            row("coles", "1", "Basmati Rice", kcal=358.5, protein=8.9),
+            row("coles", "2", "Basmati Rice", kcal=358.5, protein=8.9),
+            row("coles", "3", "Basmati Rice", kcal=365.7, protein=8.5),
+            row("coles", "4", "Basmati Rice", kcal=365.7, protein=8.5),
+            row("coles", "5", "Basmati Rice", kcal=107.6, protein=2.6),
+        ]
+
+    def test_the_odd_one_out_loses_to_its_peers(self) -> None:
+        top = Local(self.bags()).search("basmati rice", limit=1)[0]
+
+        assert top["kcal"] != 107.6
+
+    def test_it_is_ranked_last_rather_than_dropped(self) -> None:
+        """Still an answer, just never the first one."""
+        results = Local(self.bags()).search("basmati rice", limit=5)
+
+        assert results[-1]["kcal"] == 107.6
+
+    def test_two_records_are_not_a_consensus(self) -> None:
+        """With no peers to disagree with, nothing is an outlier."""
+        pair = [
+            row("coles", "1", "Basmati Rice", kcal=358.5, protein=8.9),
+            row("coles", "2", "Basmati Rice", kcal=107.6, protein=2.6),
+        ]
+
+        assert len(Local(pair).search("basmati rice", limit=2)) == 2
+
+    def test_a_differently_named_product_is_not_a_peer(self) -> None:
+        """Consensus is among records claiming to be the same thing."""
+        mixed = [
+            row("coles", "1", "Basmati Rice", kcal=358.5, protein=8.9),
+            row("coles", "2", "Rice Cakes", kcal=380, protein=8),
+            row("coles", "3", "Rice Milk", kcal=47, protein=0.3),
+        ]
+
+        top = Local(mixed).search("basmati rice", limit=1)[0]
+
+        assert top["name"] == "Basmati Rice"
