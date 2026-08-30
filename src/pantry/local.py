@@ -82,12 +82,17 @@ _HEAD_MISS = 60
 # Qualifiers naming a different food rather than a more precise one. Counted
 # rather than scored, so a query that asks for one still finds it and a record
 # is never sunk for stating a preparation the query simply did not mention.
+#
+# The last line names a part rather than a preparation: an egg white is its own
+# food, and `eggs` must answer with the whole egg at 127 kcal, not the white at
+# 47. Without it the two tie on leftover words and the id order decides.
 _VARIANTS = frozenset(
     """
     fried baked boiled grilled roasted toasted poached scrambled casseroled
     microwaved steamed canned frozen condensed evaporated dried sundried smoked
     pickled preserved sweetened salted cured
     free reduced low skim lite decaffeinated
+    white yolk
     """.split()
 )
 

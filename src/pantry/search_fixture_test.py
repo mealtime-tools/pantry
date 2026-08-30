@@ -37,7 +37,14 @@ FIXTURE = (
     ("paprika", ("paprika",), (), "protein", 8, 20),
     ("rolled oats", ("oats", "rolled"), (), "protein", 8, 18),
     ("milk", ("milk",), ("evaporated", "condensed"), "kcal", 30, 100),
-    ("eggs", ("egg",), ("easter", "noodle"), "protein", 9, 16),
+    (
+        "eggs",
+        ("egg",),
+        ("easter", "noodle", "white", "yolk"),
+        "protein",
+        9,
+        16,
+    ),
     ("butter", ("butter",), ("peanut", "cashew", "almond"), "fat", 70, 90),
     ("plain flour", ("flour", "plain"), ("gluten",), "protein", 7, 15),
 )
