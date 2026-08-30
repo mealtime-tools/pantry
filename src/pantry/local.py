@@ -354,7 +354,7 @@ class Local:
 
         leftover: dict[int, int] = {}
         variants: dict[int, int] = {}
-        cooked: dict[int, int] = {}
+        cooked: dict[int, bool] = {}
         for position, seen in matched.items():
             head, qualifiers = self._parts(position)
             spare = [word for word in qualifiers if word not in seen]
