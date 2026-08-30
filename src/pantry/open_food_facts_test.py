@@ -1,6 +1,10 @@
 """What Open Food Facts is asked for a barcode, and what comes back."""
 
+import io
 import json
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
@@ -110,3 +114,43 @@ def test_a_stated_calorie_figure_beats_converting_the_kilojoules() -> None:
 
     assert found is not None
     assert found["kcal"] == Decimal("490")
+
+
+def raising(status: int, body: str) -> Callable[[str], str]:
+    """A urlopen that answers with an error status carrying a body."""
+
+    def urlopen(request: object, timeout: float) -> object:
+        raise urllib.error.HTTPError(
+            "u", status, "", {}, io.BytesIO(body.encode())
+        )
+
+    return urlopen
+
+
+def test_a_code_the_database_never_heard_of_is_absent_not_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The product endpoint answers an unknown code with a 404.
+
+    That is the ordinary case, not a fault: most GTINs a retailer prints are
+    not in this community database, and the 404 body is the same
+    `{"status": 0}` a known-absent code returns. Raising made
+    `add barcode:<gtin>` report "search failed with HTTP 404" for a database
+    that no longer has a search, hiding the one sentence a caller can act on.
+    """
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        raising(404, '{"code":"1","status":0,"status_verbose":"not found"}'),
+    )
+
+    assert OpenFoodFacts().product("6932588529533") is None
+
+
+def test_any_other_error_status_is_still_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(urllib.request, "urlopen", raising(503, "down"))
+
+    with pytest.raises(RemoteFailure, match="503"):
+        OpenFoodFacts().product("6932588529533")

@@ -44,8 +44,8 @@ def _number(value: Any) -> Decimal | None:
     Six places because the unit is grams: a trace mineral figure is a few
     thousandths of a gram, and fewer places would quantise it down to a zero
     that reads as "none of it" rather than "hardly any". It is a cap on what
-    the community index states, not a repair: both the payload and the cache
-    are parsed to Decimal, so no float reaches here to be repaired.
+    the community index states, not a repair: the payload is parsed to
+    Decimal, so no float reaches here to be repaired.
     """
     if isinstance(value, bool) or not isinstance(value, (int, Decimal, str)):
         return None
@@ -131,8 +131,14 @@ def _default_get(url: str) -> str:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as error:
+        # A 404 is this endpoint saying "no such product", and it carries the
+        # same {"status": 0} body a known-absent code returns. Reading it lets
+        # the parser report an absence, which is the ordinary answer for a
+        # retailer's GTIN, rather than a failure the caller cannot act on.
+        if error.code == 404:
+            return error.read().decode("utf-8", "replace")
         raise RemoteFailure(
-            f"Open Food Facts search failed with HTTP {error.code}"
+            f"Open Food Facts failed with HTTP {error.code}"
         ) from error
     except OSError as error:
         raise RemoteFailure(f"Open Food Facts is unreachable: {error}") from (
