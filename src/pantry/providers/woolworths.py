@@ -28,7 +28,6 @@ class WoolworthsProvider(Provider):
 
     name = SOURCE
     searchable = True
-    remote = True
 
     def __init__(self, open_session: Callable[[], SearchSession]) -> None:
         self._open_session = open_session

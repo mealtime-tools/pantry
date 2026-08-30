@@ -27,7 +27,6 @@ class ColesProvider(Provider):
 
     name = SOURCE
     searchable = True
-    remote = True
 
     def __init__(self, load: Callable[[str], str]) -> None:
         self._load = load

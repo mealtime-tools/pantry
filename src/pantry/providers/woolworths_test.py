@@ -81,4 +81,4 @@ def test_a_browser_that_cannot_start_says_so() -> None:
 
 def test_the_provider_is_a_searchable_network_source() -> None:
     assert WoolworthsProvider.searchable
-    assert WoolworthsProvider.remote
+    assert not WoolworthsProvider.acquirable
