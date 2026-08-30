@@ -18,8 +18,19 @@ from pantry.ids import id_sort_key
 from pantry.products import (
     BASIS_GRAMS,
     NUTRIENT_KEYS,
-    PRODUCT_SOURCES,
     Product,
+)
+
+# How much a source's answer is worth, best first. Deliberately not
+# `PRODUCT_SOURCES`, which is a storage order: reusing it made every branded
+# retail row outrank the composition database on an equal name match.
+SOURCE_TRUST = (
+    "manual",
+    "afcd",
+    "usda",
+    "openfoodfacts",
+    "coles",
+    "woolworths",
 )
 
 
@@ -194,12 +205,12 @@ class Local:
         """Score first, then a stable tie-break so output is reproducible."""
         product = self._products[position]
         source = product.get("source")
-        order = (
-            PRODUCT_SOURCES.index(source)
-            if source in PRODUCT_SOURCES
-            else len(PRODUCT_SOURCES)
+        trust = (
+            SOURCE_TRUST.index(source)
+            if source in SOURCE_TRUST
+            else len(SOURCE_TRUST)
         )
-        return (-total, order, id_sort_key(str(product.get("id"))))
+        return (-total, trust, id_sort_key(str(product.get("id"))))
 
     def find(self, source: str, product_id: str) -> Product | None:
         """Exact composite-identity lookup: no fuzz, no network."""
