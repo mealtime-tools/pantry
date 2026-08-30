@@ -97,7 +97,7 @@ lacks a required figure sorts last rather than being treated as zero.
 
 A GTIN is printed on the pack rather than owned by any one database, so the
 prefix names the code. Open Food Facts is currently the only provider that can
-resolve one. `off:<barcode>` is the older spelling and still works.
+resolve one.
 
 Bare Coles and Woolworths product URLs remain accepted. A held record is not
 fetched again unless `--refresh` is explicit. Retailer requests are limited

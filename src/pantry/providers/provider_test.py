@@ -91,11 +91,10 @@ class TestBarcodeReference:
             id="9323536800014",
         )
 
-    def test_the_older_off_spelling_still_names_the_same_thing(self) -> None:
-        """Kept working because released tools emit it. Not documented."""
-        assert resolve_reference("off:9323536800014") == resolve_reference(
-            "barcode:9323536800014"
-        )
+    def test_the_old_off_spelling_is_gone(self) -> None:
+        """One name for one thing. Nothing pantry emits still says `off:`."""
+        with pytest.raises(UsageError, match="barcode:<barcode>"):
+            resolve_reference("off:9323536800014")
 
     def test_the_stated_forms_name_the_code_rather_than_the_database(
         self,

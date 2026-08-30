@@ -22,13 +22,11 @@ SEARCH_SOURCES = ("coles", "umall", "woolworths")
 # Who claims which stable identifier prefix. `usda:` names an identifier USDA
 # owns, and so do the two retailer forms below. A GTIN does not: it is printed
 # on the pack and every source here may publish the same one, so the prefix
-# names the code and Open Food Facts is simply the only provider that can
-# resolve one today. `off:` is the older spelling of the same thing, kept
-# because released tools emit it, and left out of REF_FORMS.
+# names the code, and Open Food Facts is simply the only provider that can
+# resolve one today.
 _PREFIXES = {
     "usda": "usda",
     "barcode": "openfoodfacts",
-    "off": "openfoodfacts",
 }
 
 REF_FORMS = (
