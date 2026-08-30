@@ -8,12 +8,12 @@ description: Search and acquire food-product nutrition from local data, Umall, U
 Start with `pantry --json search QUERY`. This is local, fast, and makes no
 network request. Each result carries a `match.score` from 0 to 1 and a
 `match.tier`. Below 0.7, treat the answer as weak and try
-`pantry --json search QUERY --shop umall`.
+`pantry --json search QUERY --source umall`.
 
 Live Umall results carry current price, availability, pack size, and URL.
 Umall has no nutrition panel. When a result has `ref: off:<barcode>`, make the
 panel permanent with `pantry add REF --json`, then use the stored result. A
-shop result without `ref` has no supported panel path; do not invent one.
+live result without `ref` has no supported panel path; do not invent one.
 
 Acquire an exact product with one of:
 
