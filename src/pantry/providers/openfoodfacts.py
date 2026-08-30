@@ -1,15 +1,13 @@
-"""Open Food Facts: discovery over the public Search-a-licious index.
+"""Open Food Facts: a barcode resolved to a panel, and nothing else.
 
 Credential-free, and a successful answer is reused for 24 hours from a
-disposable cache because the index asks callers to stay under ten searches a
-minute.
+disposable cache.
 
-Discovery and acquisition ask different endpoints because they want different
-things. Searching by name is what the index is for. Acquiring wants a panel,
-and the index does not reliably carry one: `code:8852511011448` comes back
-named and empty, and `code:9310053108556` does not come back at all, while the
-product endpoint answers both in full. A record without figures is not worth
-storing, so an acquire asks the endpoint that has them.
+Not a search source. Its name search was poor enough to be worse than the
+local store — `almonds` returned `Crunchoco Almond` — so it left `--source`
+and this provider answers only `add off:<barcode>`. That is the one thing it
+does better than anything else here: a retailer says what exists and what it
+costs, and this supplies the figures the retailer withheld.
 """
 
 from pantry.nutrition import nutrients_for_storage
@@ -20,17 +18,13 @@ from pantry.sites import build_record
 
 
 class OpenFoodFactsProvider(Provider):
-    """Community product data: candidates to search, records to acquire."""
+    """Community product data, reached by barcode only."""
 
     name = "openfoodfacts"
-    searchable = True
     acquirable = True
 
     def __init__(self, client: OpenFoodFacts) -> None:
         self._client = client
-
-    def search(self, query: str, limit: int) -> list[dict]:
-        return self._client.search(query, limit=limit)
 
     def acquire(self, ref: Reference, options: AcquireOptions) -> Product:
         """Turn one community row into a record, or refuse it.
@@ -49,6 +43,9 @@ class OpenFoodFactsProvider(Provider):
             brand=hit.get("brand", ""),
             panel=panel,
             url=hit.get("url"),
+            # The id here is the GTIN, but only this key says so to a reader
+            # joining these records to a retailer's row.
+            barcode=ref.id,
         )
 
     def _exact(self, barcode: str) -> dict:

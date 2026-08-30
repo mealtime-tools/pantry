@@ -1,9 +1,14 @@
-"""Open Food Facts discovery, and the disposable cache in front of it.
+"""Open Food Facts by barcode, and the disposable cache in front of it.
+
+One question is asked here — what product is this code — because that is the
+one Open Food Facts answers better than anything else. Its name search was
+removed once `--source` stopped offering it: it ranked `almonds` above
+`Crunchoco Almond` badly enough to be worse than the local store, and code
+nothing calls is code nobody checks.
 
 Results are candidates, not records: community-maintained, no proof of current
-retailer availability, and nothing here writes to the durable localstore. The
-cache sits under `XDG_CACHE_HOME`, where losing it costs one request, and
-exists because the public index asks for under ten searches a minute.
+retailer availability, and nothing here writes to the durable local store. The
+cache sits under `XDG_CACHE_HOME`, where losing it costs one request.
 """
 
 import hashlib
@@ -21,14 +26,12 @@ from typing import Any
 from pantry.jsonfmt import dumps
 from pantry.store import write_atomic
 
-SEARCH_URL = "https://search.openfoodfacts.org/search"
-# Exact lookup by barcode. A separate endpoint because the search index is
-# lossy: measured against it, `code:8852511011448` returns the name with an
-# empty `nutriments`, and `code:9310053108556` returns nothing at all, while
-# this answers both with a full panel. A panel is the only reason to ask.
+# Exact lookup by barcode, and not the search index, which is lossy: measured
+# against it, `code:8852511011448` returns the name with an empty `nutriments`,
+# and `code:9310053108556` returns nothing at all, while this answers both with
+# a full panel. A panel is the only reason to ask.
 PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product/{}.json"
 _USER_AGENT = "pantry/0.1 (https://github.com/owahltinez/pantry)"
-_MAX_RESULTS = 100
 _TTL_SECONDS = 24 * 60 * 60
 
 
@@ -132,7 +135,7 @@ def _default_get(url: str) -> str:
 
 
 class OpenFoodFacts:
-    """A credential-free Search-a-licious query, with an on-disk TTL cache."""
+    """A credential-free barcode lookup, with an on-disk TTL cache."""
 
     def __init__(
         self,
@@ -146,10 +149,9 @@ class OpenFoodFacts:
         self._now = now or time.time
         self._ttl = ttl_seconds
 
-    def _path(self, query: str, limit: int) -> Path:
-        """One stable, filesystem-safe key per query and result limit."""
-        payload = json.dumps({"query": query, "limit": limit}, sort_keys=True)
-        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    def _path(self, barcode: str) -> Path:
+        """One stable, filesystem-safe file per barcode."""
+        digest = hashlib.sha256(barcode.encode("utf-8")).hexdigest()
         return self._directory / f"{digest}.json"
 
     def _cached(self, path: Path) -> list[dict] | None:
@@ -167,44 +169,25 @@ class OpenFoodFacts:
             return None
         return results if self._now() - stamp <= self._ttl else None
 
-    def search(self, query: str, limit: int = 10) -> list[dict]:
-        """Search, reusing a fresh cached answer if there is one.
-
-        Only a successful search is cached: a failure is not an answer, and
-        caching one would hide the retry the user is entitled to make.
-        """
-        page_size = min(max(limit, 0), _MAX_RESULTS)
-        if page_size == 0:
-            return []
-
-        return self._reusing(query, page_size, self._request)
-
     def product(self, barcode: str) -> dict | None:
-        """The record this barcode names, or None if the database lacks it."""
-        found = self._reusing(
-            f"product:{barcode}", 1, lambda _q, _n: self._product(barcode)
-        )
-        return found[0] if found else None
+        """The record this barcode names, or None if the database lacks it.
 
-    def _reusing(
-        self,
-        key: str,
-        page_size: int,
-        fetch: Callable[[str, int], list[dict]],
-    ) -> list[dict]:
-        """A fresh cached answer if there is one, else fetch and keep it."""
-        path = self._path(key, page_size)
+        A fresh cached answer is reused; otherwise the endpoint is asked and
+        the answer kept. Only a success is cached: a failure raises before it
+        reaches here, so a refusal never becomes the answer for a day.
+        """
+        path = self._path(barcode)
         cached = self._cached(path)
-        if cached is not None:
-            return cached
+        if cached is None:
+            cached = self._product(barcode)
+            # Whole seconds: the one serializer here writes figures, not
+            # floats.
+            write_atomic(
+                path,
+                dumps({"cached_at": int(self._now()), "results": cached}),
+            )
 
-        results = fetch(key, page_size)
-        # Whole seconds: the one serializer here writes figures, not floats.
-        write_atomic(
-            path,
-            dumps({"cached_at": int(self._now()), "results": results}),
-        )
-        return results
+        return cached[0] if cached else None
 
     def _product(self, barcode: str) -> list[dict]:
         """Ask the product endpoint for exactly this code."""
@@ -222,32 +205,3 @@ class OpenFoodFacts:
 
         hit = _parse_hit(payload.get("product"))
         return [hit] if hit is not None else []
-
-    def _request(self, query: str, page_size: int) -> list[dict]:
-        # `boost_phrase` ranks a whole name first; `langs` is not geography.
-        params = urllib.parse.urlencode(
-            {
-                "q": query,
-                "page": "1",
-                "page_size": str(page_size),
-                "boost_phrase": "true",
-                "langs": "en",
-            }
-        )
-        body = self._get(f"{SEARCH_URL}?{params}")
-
-        try:
-            payload = json.loads(body, parse_float=Decimal)
-        except ValueError as cause:
-            raise RemoteFailure(
-                "Open Food Facts search returned an invalid response"
-            ) from cause
-
-        hits = payload.get("hits") if isinstance(payload, dict) else None
-        if not isinstance(hits, list):
-            raise RemoteFailure(
-                "Open Food Facts search returned an invalid response"
-            )
-
-        parsed = (_parse_hit(hit) for hit in hits)
-        return [hit for hit in parsed if hit is not None]

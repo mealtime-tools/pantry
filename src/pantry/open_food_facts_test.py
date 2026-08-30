@@ -8,8 +8,9 @@ import pytest
 
 from pantry.open_food_facts import OpenFoodFacts, RemoteFailure
 
-# The product endpoint's answer for a code the search index knows by name but
-# holds no figures for. Trimmed to the fields a record is built from.
+# Shaped like the product endpoint's answer, carrying every field a record
+# is built from. The live row for this code states only energy, which is why
+# the macros here are invented rather than copied.
 PRODUCT = {
     "status": 1,
     "product": {
