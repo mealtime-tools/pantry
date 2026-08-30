@@ -170,7 +170,7 @@ def product_ref(url: str) -> ProductRef:
     return ProductRef(source=source, id=normalize_id(site_id), url=url)
 
 
-def _next_data(html: str) -> Any:
+def next_data(html: str) -> Any:
     """Pull the server-rendered payload out of a page, or say it was absent."""
     match = _NEXT_DATA.search(html)
     if not match:
@@ -188,7 +188,7 @@ def _next_data(html: str) -> Any:
 
 def parse_product_page(ref: ProductRef, html: str) -> Product:
     """Read a fetched page into a record in exactly the JSONL schema."""
-    return read_product(ref, _next_data(html))
+    return read_product(ref, next_data(html))
 
 
 def read_product(ref: ProductRef, payload: Any) -> Product:

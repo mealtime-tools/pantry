@@ -16,7 +16,7 @@ from pantry.products import Product
 from pantry.sites import product_ref
 
 # Network sources with a live name search. The local store is the default.
-SEARCH_SOURCES = ("umall", "woolworths")
+SEARCH_SOURCES = ("coles", "umall", "woolworths")
 
 # Who claims which stable identifier prefix.
 _PREFIXES = {

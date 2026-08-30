@@ -14,9 +14,15 @@ from pantry.commands.lookup import lookup
 from pantry.commands.search import search
 from pantry.open_food_facts import OpenFoodFacts, cache_dir
 from pantry.providers import Providers
+from pantry.providers.coles import ColesProvider
 from pantry.providers.local import LocalProvider
 from pantry.providers.openfoodfacts import OpenFoodFactsProvider
-from pantry.providers.pages import PlainTransport, TransportSet
+from pantry.providers.pages import (
+    PageBudget,
+    PageLoader,
+    PlainTransport,
+    TransportSet,
+)
 from pantry.providers.retailer import RetailerProvider
 from pantry.providers.umall import UmallProvider
 from pantry.providers.usda import UsdaProvider
@@ -47,6 +53,22 @@ def _open_transports(browser: bool) -> TransportSet:
     return TransportSet([plain, BrowserTransport(page)], close)
 
 
+def _load_page(url: str) -> str:
+    """One plain page load, for the one search that is a page load.
+
+    A budget of one because a Coles search is a single request: nothing here
+    pages through a catalogue, and leaving room for more would only mean
+    spending the burst the user still needs for `add`.
+    """
+    opened = _open_transports(False)
+    try:
+        return PageLoader(opened.transports, PageBudget(1), pace_ms=0).load(
+            url
+        )
+    finally:
+        opened.close()
+
+
 def _providers(store: Store) -> Providers:
     """Every source this run can use.
 
@@ -57,6 +79,7 @@ def _providers(store: Store) -> Providers:
     return Providers(
         [
             LocalProvider(store),
+            ColesProvider(_load_page),
             OpenFoodFactsProvider(OpenFoodFacts(cache_dir())),
             UsdaProvider(),
             RetailerProvider(_open_transports),

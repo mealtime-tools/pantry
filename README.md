@@ -7,7 +7,7 @@ written to a product record.
 ```sh
 pantry --json search "greek yoghurt"
 pantry --json search tofu --source umall
-pantry --json search "bega high protein cheese" --source woolworths
+pantry --json search "bega high protein cheese" --source coles
 pantry add off:9323536800014
 pantry add coles:https://www.coles.com.au/product/example-1047
 pantry add usda:2476857
@@ -25,6 +25,10 @@ macros and a `ref` naming where the panel is. Adding that ref fetches and
 stores a separate nutrition record; price and availability stay live-result
 fields and are never copied into it.
 
+- `--source coles` is a plain request, about 0.5s. The results page is
+  server-rendered, so nothing here needs a browser. It spends one of the four
+  or five page loads Coles serves in a burst, so one query is one request. The
+  result's ref is `coles:<url>`.
 - `--source umall` is a plain request, about 0.6s. Where a product publishes
   an external barcode the result's ref is `off:<barcode>`.
 - `--source woolworths` needs a browser and opens a visible window: the
@@ -34,7 +38,9 @@ fields and are never copied into it.
   The result's ref is `woolworths:<stockcode>`, and its `barcode` is the GTIN
   the page prints.
 
-Coles has no search here. Its products are added by URL.
+Neither shop's order is rescored. Their relevance engines know their own
+catalogues and their shoppers' words — asked for "shredded cheese" they answer
+with the grated ones — which is why shop results carry no `match` either.
 
 ## Records and matching
 
