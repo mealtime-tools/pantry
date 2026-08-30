@@ -1,70 +1,43 @@
 ---
 name: pantry
-description: Search and acquire food-product nutrition from local retailer data, USDA, Open Food Facts, Coles, and Woolworths, and price it against a refreshed retailer catalogue.
+description: Search and acquire food-product nutrition from local data, Umall, USDA, Open Food Facts, Coles, and Woolworths.
 ---
 
 # Pantry
 
-Use `pantry --json search QUERY`; add `--remote` only when local data does not
-identify the product. Acquire an exact product with `pantry add REF --json`,
-where `REF` is a retailer URL, `usda:ID`, or `off:BARCODE`.
+Start with `pantry --json search QUERY`. This is local, fast, and makes no
+network request. Each result carries a `match.score` from 0 to 1 and a
+`match.tier`. Below 0.7, treat the answer as weak and try
+`pantry --json search QUERY --shop umall`.
+
+Live Umall results carry current price, availability, pack size, and URL.
+Umall has no nutrition panel. When a result has `ref: off:<barcode>`, make the
+panel permanent with `pantry add REF --json`, then use the stored result. A
+shop result without `ref` has no supported panel path; do not invent one.
+
+Acquire an exact product with one of:
+
+- `pantry add coles:<product-url> --json`
+- `pantry add off:<barcode> --json`
+- `pantry add usda:<fdcId> --json`
+
+`woolworths:<stockcode>` is reserved but its reader is not implemented yet.
+Do not retry a retailer block or bypass bot protection.
 
 Nutrients describe the result's `grams`, always present and 100 unless
-`--grams N` on `search` or `lookup` asks for another weight. Pipe the result to
-`recipes edit --input -`, or to whatever tool logs intake; never scale by hand. No
-pack or serving size is held, so supply the weight you mean. A per-100 mL panel
-is reported as per 100 g and says so in `basis_note`.
+`--grams N` on `search` or `lookup` asks for another weight. `pack_grams` is
+only the package size of a live offer. Never scale nutrition from
+`pack_grams`. A per-100 mL panel is represented on the 100 g basis and states
+that compromise in `basis_note`.
 
-Every result carries `match`, which is how the answer should be judged: a
-`score` from 0 to 1 for how much of the query the name accounted for, and a
-`tier` naming the kind of source — `verified`, `composition`, `crowdsourced`
-or `retail`. Below 0.7 the store answered with something, but not with what
-was asked for; that is when `--remote` is worth the network. Neither key is
-stored, so the same record scores differently for a different query.
+`pantry add --input FILE|- --json` accepts one flat JSON object. Its `grams`
+is the basis of the supplied figures and defaults to 100. Energy is `kcal`;
+all other nutrient values are grams. Pantry does not parse prose and has no
+`kj` field.
 
-`pantry add --input FILE|- --json` accepts one flat JSON object whose `grams`
-is the weight its nutrients describe, 100 g by default. Pantry does not parse
-prose. Energy is `kcal` and every other nutrient is grams; there is no `kj`
-key, so state kilojoules as the kcal they convert to.
+Use `pantry lookup SOURCE ID --json` for an exact local read. Use
+`pantry delete SOURCE ID --json` only for records in the user's store. Shipped
+records cannot be deleted.
 
-`pantry refresh umall --json` rebuilds the Umall catalogue: about twenty
-thousand priced food rows, a minute of network, replacing whatever was there.
-Umall also sells cosmetics and kitchenware; those are excluded by category and
-counted as `excluded`, so the catalogue is food and the coverage figures mean
-something.
-`pantry search QUERY --source umall` then reads it offline. Those results add
-`price`, `pack_grams`, `price_per_100g`, `price_per_100kcal`,
-`price_per_g_protein`, `available` and `price_at` to the usual keys; every one
-of them is `null` where the figure it needs is missing, never zero. Pack
-weight is `pack_grams`, never `grams`: `grams` stays the weight the nutrients
-describe. Umall states no nutrition, so a row's panel is empty until
-`pantry add off:<barcode>` stores one — the row carries that reference in
-`ref` when the barcode is one another database could know. Until a refresh has
-run, the provider is absent from `sources` rather than an error.
-
-`pantry backfill umall --json` stores Open Food Facts panels for the barcodes
-that catalogue lists. Run it after a refresh; it is the only way to answer
-tens of thousands of barcodes, since the public index allows about ten
-searches a minute. By default it downloads the whole 7.8 GB parquet database
-once into the cache directory and queries it locally; `--from csv` streams the
-1.3 GB English export instead, storing nothing but finding less. Its report separates
-barcodes absent from the export from ones present with no usable panel, and
-neither is ever filled in with a guess. Coverage is thin and uneven: about one
-joinable barcode in five stores a panel from the parquet, half that from the
-CSV, and the rate follows where the barcode was issued — fresh produce has
-nearly none. Treat a panel as a bonus, not the normal case.
-
-The same pass writes what the export concluded about each ingredient list.
-`pantry search --vegetarian` keeps only results it judged vegetarian or vegan;
-a result whose `diet` is absent is unknown and never passes. That judgement is
-rarer still — 250 of those 25,637 — so this filter answers about a handful of
-products, not the catalogue. Umall's own `type` and `tags` cover far more. `--sort` takes
-`protein-per-kcal`, `price-per-100g` or `price-per-g-protein`, and a result
-lacking the figure a key needs sorts last rather than as a zero.
-
-`pantry delete SOURCE ID --json` removes one record from the user's own
-store. A shipped record cannot be deleted, and neither can one that was never
-held: both exit 1 with `deleted: false`.
-
-Unknown output values are `null`. An explicit zero remains zero. Never retry a
-retailer block or bypass bot protection.
+Unknown output values are `null`. An explicit zero remains zero. Never infer
+missing nutrients, a cooked weight, a barcode, or a price.
