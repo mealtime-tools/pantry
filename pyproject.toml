@@ -32,8 +32,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/mealtime-tools/pantry"
 
-# The browser fallback is opt-in at the command line, so it is opt-in at
-# install time too: a clone with no Playwright still fetches over plain HTTP.
+# Opt-in at install time, as it is at the command line. Without it a clone
+# still fetches every panel over plain HTTP, which is the common path; what it
+# cannot do is search Woolworths, whose results only a browser may ask for.
 [project.optional-dependencies]
 browser = ["playwright>=1.44"]
 

@@ -8,20 +8,24 @@ description: Search and acquire food-product nutrition from local data, Umall, U
 Start with `pantry --json search QUERY`. This is local, fast, and makes no
 network request. Each result carries a `match.score` from 0 to 1 and a
 `match.tier`. Below 0.7, treat the answer as weak and try
-`pantry --json search QUERY --source umall`.
+`pantry --json search QUERY --source umall|woolworths`.
 
-Live Umall results carry current price, availability, pack size, and URL.
-Umall has no nutrition panel. When a result has `ref: off:<barcode>`, make the
-panel permanent with `pantry add REF --json`, then use the stored result. A
-live result without `ref` has no supported panel path; do not invent one.
+Live shop results carry current price, availability, pack size and URL, and no
+nutrition panel. When a result has a `ref`, make the panel permanent with
+`pantry add REF --json` and use the stored result. A live result without one
+has no supported panel path; do not invent one.
+
+Umall is a plain request. Woolworths needs `pantry[browser]` and opens a
+visible Chrome window, so reach for it when the user wants a shelf price, not
+to settle a macro question the store can already answer.
 
 Acquire an exact product with one of:
 
 - `pantry add coles:<product-url> --json`
 - `pantry add off:<barcode> --json`
 - `pantry add usda:<fdcId> --json`
+- `pantry add woolworths:<stockcode> --json`
 
-`woolworths:<stockcode>` is reserved but its reader is not implemented yet.
 Do not retry a retailer block or bypass bot protection.
 
 Nutrients describe the result's `grams`, always present and 100 unless

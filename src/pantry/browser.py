@@ -53,7 +53,7 @@ def launch_chrome(headless: bool = True) -> tuple[Any, Any]:
         from playwright.sync_api import sync_playwright
     except ImportError as cause:
         raise RuntimeError(
-            "the browser fallback needs playwright: "
+            "driving a browser needs playwright: "
             "uv pip install 'pantry[browser]'"
         ) from cause
 

@@ -7,6 +7,7 @@ written to a product record.
 ```sh
 pantry --json search "greek yoghurt"
 pantry --json search tofu --source umall
+pantry --json search "bega high protein cheese" --source woolworths
 pantry add off:9323536800014
 pantry add coles:https://www.coles.com.au/product/example-1047
 pantry add usda:2476857
@@ -15,19 +16,25 @@ pantry delete manual sourdough
 ```
 
 Local search reads the shipped shards and everything previously added. If it
-does not identify the product, `--source umall` makes a live request and
+does not identify the product, `--source` makes a live request to one shop and
 returns current offers with `price`, `currency`, `pack_grams`,
-`price_per_100g`, `available`, and `url`. Where the source publishes an
-external barcode, the result also carries an `off:<barcode>` reference that
-Open Food Facts can resolve into a permanent nutrition record.
+`price_per_100g`, `available`, and `url`.
 
-Umall publishes no nutrition panel, so its live results always have `null`
-macros. Adding a result's `ref` returns and stores a separate nutrition record.
-Price and availability remain live-result fields and are not copied into it.
+Neither shop's search carries a nutrition panel, so live results have `null`
+macros and a `ref` naming where the panel is. Adding that ref fetches and
+stores a separate nutrition record; price and availability stay live-result
+fields and are never copied into it.
 
-Woolworths stockcode references are reserved as
-`woolworths:<stockcode>`. The reader is not implemented yet and returns a
-clear error without storing anything.
+- `--source umall` is a plain request, about 0.6s. Where a product publishes
+  an external barcode the result's ref is `off:<barcode>`.
+- `--source woolworths` needs a browser and opens a visible window: the
+  results page carries no products, and the request behind it is refused for
+  anything that is not a browser, headless included. Install it with
+  `pantry[browser]`. About 4s to start, then 2-6s a query in the same run.
+  The result's ref is `woolworths:<stockcode>`, and its `barcode` is the GTIN
+  the page prints.
+
+Coles has no search here. Its products are added by URL.
 
 ## Records and matching
 
@@ -60,7 +67,7 @@ lacks a required figure sorts last rather than being treated as zero.
 `pantry add REF` accepts these forms:
 
 - `coles:<product-url>`
-- `woolworths:<stockcode>` (reserved; reader not implemented)
+- `woolworths:<stockcode>`
 - `off:<barcode>`
 - `usda:<fdcId>`
 
