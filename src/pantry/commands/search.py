@@ -104,11 +104,17 @@ def search(
         asked = limit * CANDIDATE_POOL if narrowing else limit
 
         results: list[dict] = []
-        for provider in providers:
-            results.extend(
-                rescale(result_with_nulls(result), grams)
-                for result in provider.search(text, asked)
-            )
+        try:
+            for provider in providers:
+                results.extend(
+                    rescale(result_with_nulls(result), grams)
+                    for result in provider.search(text, asked)
+                )
+        finally:
+            # A searching provider may be holding a browser open. Released
+            # here even when the search failed, which is when it matters.
+            for provider in providers:
+                provider.close()
 
         if sort_by:
             results = _sorted(results, sort_by)

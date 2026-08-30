@@ -17,6 +17,7 @@ anywhere near it.
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from pantry.local import Local
 from pantry.umall import net_grams, price_per_100_grams
 
 SOURCE = "woolworths"
@@ -81,11 +82,18 @@ def _product(row: Any) -> dict[str, Any] | None:
     return result
 
 
-def read_search(payload: Any, limit: int) -> list[dict[str, Any]]:
+def read_search(
+    payload: Any, limit: int, query: str = ""
+) -> list[dict[str, Any]]:
     """Every offer the payload holds, best first, at most `limit` of them.
 
     The site groups variants of one product together; the limit counts the
     products a caller would choose between, not the groups around them.
+
+    With a query the rows are reranked the way every other source is, so one
+    model spans every shop: asked for "bega cheese" the shop leads with a
+    Philadelphia spread, which is its relevance and not the question. Without
+    one the shop's own order stands, since there is nothing to rank against.
     """
     if not isinstance(payload, dict):
         return []
@@ -98,9 +106,13 @@ def read_search(payload: Any, limit: int) -> list[dict[str, Any]]:
     for group in groups:
         rows = group.get("Products") if isinstance(group, dict) else None
         for row in rows or ():
-            if len(found) >= limit:
-                return found
             if (result := _product(row)) is not None:
                 found.append(result)
 
-    return found
+    if not query:
+        return found[:limit]
+
+    return [
+        {**row, "match": match}
+        for row, match in Local(found).scored(query, limit)
+    ]

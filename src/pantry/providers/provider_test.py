@@ -23,8 +23,9 @@ def names(providers: list[Provider]) -> list[str]:
     return [provider.name for provider in providers]
 
 
-def test_only_umall_is_currently_a_live_search_source() -> None:
-    assert SEARCH_SOURCES == ("umall",)
+def test_the_live_search_sources_are_the_shops() -> None:
+    """Open Food Facts and USDA answer through `add`, not through search."""
+    assert SEARCH_SOURCES == ("umall", "woolworths")
 
 
 def test_the_store_is_the_silent_default() -> None:
