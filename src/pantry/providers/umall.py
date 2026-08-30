@@ -6,9 +6,9 @@ a price finder: it says what Umall sells for a name and what it costs, ranked
 the same way every other source is, and carries no panel and no acquirable
 reference. A row's nutrition, if it is ever wanted, is a separate `add`.
 
-The suggest endpoint is the network act, so this provider is `remote`: a
-search costs one request and answers only under `--shop umall`. The transport
-is injected, so every test here runs offline.
+The suggest endpoint is the network act, so a search costs one request and
+answers only under `--shop umall`. The transport is injected, so every test
+here runs offline.
 """
 
 import json
@@ -158,9 +158,6 @@ class UmallProvider(Provider):
 
     searchable = True
     acquirable = False
-
-    # Costs a request, so a search asks it only under `--shop umall`.
-    remote = True
 
     def __init__(self, fetch: Fetch | None = None) -> None:
         self._fetch = fetch or _get

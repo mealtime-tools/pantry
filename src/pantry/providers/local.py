@@ -12,7 +12,6 @@ class LocalProvider(Provider):
     """Fuzzy search over everything already held."""
 
     name = "local"
-    remote = False
     searchable = True
 
     def __init__(self, store: Store) -> None:

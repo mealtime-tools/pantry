@@ -28,7 +28,7 @@ from pantry.products import (
     record_keys,
     rescale,
 )
-from pantry.providers import Providers
+from pantry.providers import Provider, Providers
 from pantry.providers.local import LocalProvider
 from pantry.providers.pages import Blocked, PageBudget, PageLoader
 from pantry.session import Deps
@@ -89,6 +89,55 @@ def _run(tmp_path: Path, args: list[str]) -> dict:
     result = _invoke(tmp_path, args)
     assert result.exit_code == 0, result.output
     return json.loads(result.output)["data"]
+
+
+class _Shop(Provider):
+    """One deterministic live-shop answer for command contract tests."""
+
+    name = "umall"
+    searchable = True
+
+    def search(self, query: str, limit: int) -> list[dict]:
+        return [
+            {
+                "source": "umall",
+                "id": "1",
+                "name": f"{query.title()} 250g",
+                "brand": "Example",
+                "grams": 100,
+                "price": Decimal("2.50"),
+                "match": {"score": Decimal("1"), "tier": "unknown"},
+            }
+        ][:limit]
+
+
+def test_shop_search_replaces_the_local_store(tmp_path: Path) -> None:
+    store = Store(lambda: [_AFCD, _COLES], tmp_path / "store")
+    state = Deps(
+        store=store,
+        providers=Providers([LocalProvider(store), _Shop()]),
+        write_out=lambda path, text: None,
+    )
+
+    result = CliRunner().invoke(
+        main,
+        ["search", "tofu", "--shop", "umall", "--json"],
+        obj=state,
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)["data"]
+    assert payload["sources"] == ["umall"]
+    assert [row["source"] for row in payload["results"]] == ["umall"]
+
+
+def test_search_help_exposes_only_the_shop_selector() -> None:
+    result = CliRunner().invoke(main, ["search", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--shop" in result.output
+    assert "--source" not in result.output
+    assert "--remote" not in result.output
 
 
 def test_search_accepts_both_shard_vocabularies_and_omits_the_unstated() -> (

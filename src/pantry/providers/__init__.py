@@ -15,8 +15,8 @@ from pantry.ids import normalize_id
 from pantry.products import Product
 from pantry.sites import product_ref
 
-# What `--source` selects: provider names, not the record sources they write.
-PROVIDER_NAMES = ("local", "umall", "openfoodfacts", "usda", "retailer")
+# Shops with a live name search. The local store is the silent default.
+SHOP_NAMES = ("umall",)
 
 # Who claims which prefix. A retailer reference is a url and carries none.
 _PREFIXES = {"usda": "usda", "off": "openfoodfacts"}
@@ -52,8 +52,6 @@ class Provider:
 
     name = ""
 
-    # Whether this costs a request; search asks those only under --remote.
-    remote = True
     searchable = False
     acquirable = False
 
@@ -88,25 +86,13 @@ class Providers:
             raise UsageError(f"no provider named {name}")
         return provider
 
-    def searchers(
-        self, *, remote: bool = False, only: tuple[str, ...] = ()
-    ) -> list[Provider]:
-        """The providers a search may ask, in the order they are asked.
+    def searchers(self, *, shop: str | None = None) -> list[Provider]:
+        """The local store, or the one live shop explicitly requested."""
+        provider = self._by_name.get(shop or "local")
+        if provider is None or not provider.searchable or not provider.enabled:
+            return []
 
-        Left out with no message: one that cannot search, one that was not
-        asked for, one costing a request the caller did not opt into, and one
-        with no credential. The answer is still complete for the providers
-        consulted, and the payload names them.
-        """
-        chosen = []
-        for name in only or PROVIDER_NAMES:
-            provider = self._by_name.get(name)
-            if provider is None or not provider.searchable:
-                continue
-            if provider.enabled and (remote or not provider.remote):
-                chosen.append(provider)
-
-        return chosen
+        return [provider]
 
 
 def resolve_reference(ref: str) -> Reference:

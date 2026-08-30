@@ -97,9 +97,6 @@ class TestSearch:
         assert results[0]["id"] == "1"
         assert len(results) == 2
 
-    def test_search_is_a_remote_operation(self) -> None:
-        assert UmallProvider.remote
-
 
 class TestRequest:
     """The suggest request states the query and product-only limit exactly."""
