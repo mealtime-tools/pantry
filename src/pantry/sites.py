@@ -24,6 +24,7 @@ from pantry.products import (
     Product,
     as_decimal,
 )
+from pantry.woolworths import product_name
 
 # The one decimal place every shard states energy to.
 _ENERGY_PLACE = Decimal("0.1")
@@ -126,7 +127,7 @@ def _read_woolworths(payload: Any) -> dict[str, Any]:
     ]
 
     return {
-        "name": str(product.get("Name") or ""),
+        "name": product_name(product.get("Name")),
         "brand": str(product.get("Brand") or ""),
         "barcode": str(product.get("Barcode") or "") or None,
         "panel": panel_from_rows(rows),

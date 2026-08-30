@@ -121,3 +121,14 @@ def test_a_result_carries_the_address_a_person_would_open() -> None:
     assert first["url"] == (
         "https://www.woolworths.com.au/shop/productdetails/6026666"
     )
+
+
+def test_an_unsubstituted_placeholder_is_not_part_of_the_name() -> None:
+    """Woolworths' own data: stockcode 349163 is named `Quorn Mince NULL`,
+    where the pack size failed to interpolate. Verified live 2026-08-30."""
+    broken = {**BEGA, "Name": "Quorn Mince NULL"}
+
+    found = read_search(payload(broken), limit=1)[0]
+
+    assert found["name"] == "Quorn Mince"
+    assert found["title"] == "Quorn Mince (Bega)"

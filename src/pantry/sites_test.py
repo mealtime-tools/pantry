@@ -107,3 +107,16 @@ class TestBasis:
 def test_a_page_carrying_no_product_is_refused() -> None:
     with pytest.raises(SiteError, match="no product"):
         read_product(COLES, {})
+
+
+def test_a_woolworths_placeholder_is_not_stored_as_a_name() -> None:
+    """The same defect on the product page, which is what gets stored."""
+    payload = {
+        "pdDetails": {
+            "Product": {"Name": "Quorn Mince NULL", "Brand": "Quorn"},
+            "NutritionalInformation": [],
+        }
+    }
+    ref = ProductRef(source="woolworths", id="349163", url="https://x/349163")
+
+    assert read_product(ref, payload)["name"] == "Quorn Mince"

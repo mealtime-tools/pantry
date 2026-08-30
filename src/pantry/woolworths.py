@@ -14,6 +14,7 @@ This module holds only the reading, so the parsing is testable with no browser
 anywhere near it.
 """
 
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -32,6 +33,18 @@ SEARCH_API = "/apis/ui/Search/products"
 # A stockcode is the whole of a Woolworths address: the slug the site adds
 # after it is decoration, and the page serves without it. Measured 0.18s.
 PRODUCT_URL = "https://www.woolworths.com.au/shop/productdetails/{}"
+
+
+# Woolworths builds a product name from a template, and where the pack size is
+# missing the token survives into the name: stockcode 349163 is published as
+# "Quorn Mince NULL". Their defect, but ours to not store. Anchored and
+# case-sensitive so a real word is never clipped.
+_PLACEHOLDER = re.compile(r"\s+NULL$")
+
+
+def product_name(value: Any) -> str:
+    """The product's name, without a placeholder that failed to substitute."""
+    return _PLACEHOLDER.sub("", str(value or "").strip())
 
 
 def _decimal(value: Any) -> Decimal | None:
@@ -54,7 +67,7 @@ def _product(row: Any) -> dict[str, Any] | None:
     stockcode = row.get("Stockcode")
     stockcode = "" if stockcode is None else str(stockcode).strip()
 
-    name = str(row.get("Name") or "").strip()
+    name = product_name(row.get("Name"))
     price = _decimal(row.get("Price"))
     if not stockcode or not name or price is None:
         return None
