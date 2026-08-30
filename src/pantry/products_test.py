@@ -9,7 +9,9 @@ from pantry.jsonfmt import dumps
 from pantry.products import (
     NUTRIENT_KEYS,
     ProductError,
+    assert_exportable_product,
     assert_product_record,
+    format_jsonl,
     parse_jsonl,
     record_keys,
     restate,
@@ -112,3 +114,58 @@ class TestBarcode:
 
         with pytest.raises(ProductError, match="barcode"):
             assert_product_record(record)
+
+
+def test_a_reader_ignores_a_key_it_does_not_define() -> None:
+    """The shared item format says so, and this file did not follow it.
+
+    Adding `barcode` and then `entered` broke every consumer pinned to an
+    older pantry: the `recipes` tool bundles 0.3.4 and refused to read a
+    store the current one had written. A closed reader makes every new key a
+    breaking change for somebody else.
+    """
+    line = (
+        '{"source":"coles","id":"1","name":"X","brand":"",'
+        '"kcal":100,"grams":100,"invented_later":true}'
+    )
+
+    parsed = parse_jsonl(line)
+
+    assert parsed[0]["kcal"] == 100
+    assert parsed[0]["invented_later"] is True
+
+
+def test_writing_drops_a_key_this_version_does_not_define() -> None:
+    """Ignoring it on the way in must not mean writing it back out."""
+    record = {
+        "source": "coles",
+        "id": "1",
+        "name": "X",
+        "brand": "",
+        "kcal": 100,
+        "grams": 100,
+        "invented_later": True,
+    }
+
+    assert "invented_later" not in format_jsonl([record])
+
+
+def test_a_record_this_tool_built_still_may_not_carry_a_stray_key() -> None:
+    """The strict check stays where it protects us: our own write path.
+
+    A provider emitting `sodum` is our bug, and storing it would hide the
+    sodium forever. That is a different boundary from reading a file a newer
+    version wrote.
+    """
+    record = {
+        "source": "coles",
+        "id": "1",
+        "name": "X",
+        "brand": "",
+        "kcal": 100,
+        "grams": 100,
+        "sodum": 1,
+    }
+
+    with pytest.raises(ProductError):
+        assert_exportable_product(record)

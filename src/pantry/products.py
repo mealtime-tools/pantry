@@ -246,7 +246,13 @@ def without_kilojoules(product: Product) -> Product:
 
 
 def _check_keys(product: Product) -> None:
-    """Refuse a key this format does not define, rather than storing it."""
+    """Refuse a key this format does not define, rather than storing it.
+
+    The write path only. A reader ignores a key it does not define, as the
+    shared item format requires: checking here too made every key this tool
+    adds a breaking change for anyone holding an older copy of it, which is
+    exactly what `barcode` and `entered` did to the recipes CLI.
+    """
     unknown = sorted(set(product) - _ALLOWED_KEYS)
     if unknown:
         raise ProductError(
@@ -302,7 +308,9 @@ def canonicalize(product: Product, source: str | None = None) -> Product:
             f"{_label(product)} cannot be written to the {source} shard"
         )
 
-    _check_keys(product)
+    # No key check either: this builds from `record_keys`, so a key this
+    # version does not know is dropped rather than written back out. What
+    # guards our own records is `assert_product_record`, on the way in.
 
     # A shard's filename supplies its source, so its rows need not repeat it.
     skip = {"source"} if source else set()
@@ -354,8 +362,9 @@ def parse_jsonl(
                 parsed = {"source": source, **parsed}
             parsed = without_kilojoules(parsed)
             assert_identity(parsed)
-            _check_keys(parsed)
-            # Checked on read: an unrecognised basis silently becomes as-sold.
+            # No key check: a row a newer version wrote is still readable, and
+            # `canonicalize` drops what this version cannot write. A basis is
+            # checked, because an unrecognised one silently becomes as-sold.
             _check_basis(parsed)
         except (ValueError, AttributeError) as cause:
             raise ProductError(

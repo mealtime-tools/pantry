@@ -58,6 +58,10 @@ panel is read as per 100 g and says so in `basis_note`.
 
 An item is a flat record in the shared
 [item format](https://github.com/mealtime-tools/nutrients/blob/main/FORMAT.md).
+Reading follows that format's rule and ignores a key it does not define, so a
+store written by a newer Pantry still opens here; writing drops what this
+version cannot express. What a record may contain on the way *in* stays
+closed, because `sodum` would store cleanly and hide the sodium forever.
 Energy is `kcal`; every other nutrient is grams. Kilojoules are converted when
 a panel is read, so no stored record has a `kj` field. Unknown nutrients are
 `null`; zero is returned only when the source explicitly reported zero.
