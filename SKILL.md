@@ -23,7 +23,7 @@ report the product as having no panel, and do not type one in to fill the gap.
 
 Coles and Umall are plain requests, under a second. Prefer Coles for an
 ordinary supermarket product: Umall stocks a different catalogue and answers
-common queries with unrelated rows. Woolworths needs `pantry[browser]` and
+common queries with unrelated rows. Woolworths needs the browser extra and
 opens a visible Chrome window, so reach for it when the user wants that shop's
 shelf price, not to settle a macro question the store can already answer.
 

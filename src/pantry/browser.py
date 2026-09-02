@@ -42,6 +42,12 @@ class BrowserTransport:
         return (status, self._page.content())
 
 
+# The only install guidance pantry prints, so it has to be the command that
+# works. `uv pip install` does not reach the environment `uv tool install`
+# builds, and the distribution is `mealtime-pantry`, not `pantry`.
+BROWSER_HINT = "uv tool install 'mealtime-pantry[browser]'"
+
+
 def launch_chrome(headless: bool = True) -> tuple[Any, Any]:
     """Start a browser, preferring the Chrome already on the machine.
 
@@ -53,8 +59,7 @@ def launch_chrome(headless: bool = True) -> tuple[Any, Any]:
         from playwright.sync_api import sync_playwright
     except ImportError as cause:
         raise RuntimeError(
-            "driving a browser needs playwright: "
-            "uv pip install 'pantry[browser]'"
+            f"driving a browser needs playwright: {BROWSER_HINT}"
         ) from cause
 
     driver = sync_playwright().start()

@@ -41,9 +41,9 @@ on 2026-08-30, nine were unknown there. `pantry add` says so and stops.
 - `--source woolworths` needs a browser and opens a visible window: the
   results page carries no products, and the request behind it is refused for
   anything that is not a browser, headless included. Install it with
-  `pantry[browser]`. About 4s to start, then 2-6s a query in the same run.
-  The result's ref is `woolworths:<stockcode>`, and its `barcode` is the GTIN
-  the page prints.
+  `uv tool install 'mealtime-pantry[browser]'`. About 4s to start, then 2-6s
+  a query in the same run. The result's ref is `woolworths:<stockcode>`, and
+  its `barcode` is the GTIN the page prints.
 
 Coles and Woolworths results keep the shop's own order and carry no `match`.
 Their relevance engines know their catalogues and their shoppers' words —
